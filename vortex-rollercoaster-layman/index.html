@@ -413,13 +413,15 @@
       }
       .cockpit-collapsible {
         display: flex; flex-direction: column; gap: 10px;
-        max-height: 360px;
+        max-height: 420px;
+        padding: 0 2px 8px;
         opacity: 1;
         overflow: hidden;
-        transition: max-height 0.42s var(--ease-out-expo), opacity 0.28s ease;
+        transition: max-height 0.42s var(--ease-out-expo), opacity 0.28s ease, padding 0.3s ease;
       }
       .cockpit-bar.collapsed .cockpit-collapsible {
         max-height: 0;
+        padding: 0 2px 0;
         opacity: 0;
         overflow: hidden;
       }

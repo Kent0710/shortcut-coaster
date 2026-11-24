@@ -1,0 +1,1715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Shortcut Coaster — Interactive Story and 3D Simulation</title>
+  <style>
+    :root {
+      --bg: #050509;
+      --bg-sim: #06040f;
+      --panel: rgba(12, 10, 22, 0.86);
+      --border: rgba(255, 255, 255, 0.11);
+      --cyan: #22d3ee;
+      --violet: #a855f7;
+      --pink: #f43f5e;
+      --amber: #fbbf24;
+      --emerald: #34d399;
+      --text: #f8fafc;
+      --muted: #a1a1aa;
+      --dim: #71717a;
+      --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+      --ease-in-expo: cubic-bezier(0.7, 0, 0.84, 0);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ================= 3D SIMULATION CANVAS ================= */
+    #canvas-wrap {
+      position: fixed; inset: 0;
+      opacity: 0;
+      transition: opacity 0.85s var(--ease-out-expo);
+    }
+    #canvas-wrap.visible { opacity: 1; }
+
+    .reticle {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 44px; height: 44px; border-radius: 50%;
+      border: 1.5px solid rgba(34, 211, 238, 0.35);
+      pointer-events: none; z-index: 4;
+      transition: transform 0.12s, border-color 0.15s, opacity 0.35s;
+      opacity: 0;
+    }
+
+    .jolt-banner {
+      position: fixed; top: 15%; left: 50%; transform: translateX(-50%);
+      background: rgba(244, 63, 94, 0.22); border: 1px solid #fb7185;
+      color: #fff1f2; font-size: 12px; font-weight: 700;
+      padding: 7px 18px; border-radius: 999px; pointer-events: none;
+      opacity: 0; transition: opacity 0.15s ease; z-index: 12;
+    }
+    .jolt-banner.show { opacity: 1; }
+
+    /* ================= AWWWARDS DARK EDITORIAL STORY STAGE ================= */
+    .story-stage {
+      position: fixed; inset: 0; z-index: 30;
+      background:
+        radial-gradient(ellipse 75% 55% at 50% 100%, rgba(34, 211, 238, 0.06), transparent 65%),
+        radial-gradient(ellipse 60% 45% at 80% 15%, rgba(168, 85, 247, 0.05), transparent 60%),
+        #050509;
+      display: flex; flex-direction: column; justify-content: space-between;
+      gap: 20px;
+      overflow-y: auto; overflow-x: hidden;
+      padding: clamp(20px, 3.5vw, 44px) clamp(20px, 6vw, 88px);
+      transition: opacity 0.75s var(--ease-out-expo), transform 0.75s var(--ease-out-expo), visibility 0.75s;
+    }
+    .story-stage.exited {
+      opacity: 0;
+      transform: scale(1.03);
+      pointer-events: none;
+      visibility: hidden;
+    }
+
+    /* Top Editorial Bar */
+    .story-header {
+      display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; flex-wrap: wrap;
+      flex-shrink: 0;
+    }
+    .brand-block { display: flex; flex-direction: column; gap: 4px; }
+    .brand-mark {
+      font-size: 14px; font-weight: 700; letter-spacing: -0.01em;
+      color: #ffffff;
+    }
+    .meta-strip {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+      font-size: 12px; color: var(--dim);
+    }
+    .meta-strip a {
+      color: var(--cyan); text-decoration: none;
+      border-bottom: 1px solid rgba(34, 211, 238, 0.35);
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .meta-strip a:hover { color: #ffffff; border-color: #ffffff; }
+    .meta-sep { color: rgba(255, 255, 255, 0.2); }
+    .progress-wrap {
+      display: flex; align-items: center; gap: 14px;
+    }
+    .step-counter {
+      font-size: 12px; font-weight: 600; letter-spacing: 0.04em;
+      color: var(--dim); font-variant-numeric: tabular-nums;
+    }
+    .progress-track {
+      width: 140px; height: 2px; background: rgba(255, 255, 255, 0.12);
+      overflow: hidden; border-radius: 2px;
+    }
+    .progress-fill {
+      height: 100%; width: 20%; background: var(--cyan);
+      transition: width 0.65s var(--ease-out-expo);
+    }
+
+    /* Center Stage — Large Editorial Typography */
+    .story-main {
+      width: 100%; max-width: 960px; margin: auto;
+      display: flex; flex-direction: column; justify-content: center;
+      padding: 8px 0;
+      flex-shrink: 0;
+    }
+
+    /* Masked Line Reveal Primitives */
+    .line-mask {
+      overflow: hidden;
+      display: block;
+    }
+    .reveal-el {
+      display: block;
+      will-change: transform, opacity;
+      transition:
+        transform 0.78s var(--ease-out-expo),
+        opacity 0.62s var(--ease-out-expo);
+    }
+
+    /* Enter/Exit States */
+    .story-main.prepare-enter-next .reveal-el {
+      transform: translateY(108%);
+      opacity: 0;
+      transition: none;
+    }
+    .story-main.prepare-enter-prev .reveal-el {
+      transform: translateY(-108%);
+      opacity: 0;
+      transition: none;
+    }
+    .story-main.exit-next .reveal-el {
+      transform: translateY(-44px);
+      opacity: 0;
+      transition:
+        transform 0.34s var(--ease-in-expo),
+        opacity 0.26s ease;
+    }
+    .story-main.exit-prev .reveal-el {
+      transform: translateY(44px);
+      opacity: 0;
+      transition:
+        transform 0.34s var(--ease-in-expo),
+        opacity 0.26s ease;
+    }
+
+    /* Stagger delays on entrance */
+    .story-main.active .d1 { transition-delay: 40ms; }
+    .story-main.active .d2 { transition-delay: 110ms; }
+    .story-main.active .d3 { transition-delay: 185ms; }
+    .story-main.active .d4 { transition-delay: 265ms; }
+    .story-main.active .d5 { transition-delay: 340ms; }
+
+    .kicker {
+      font-size: 12px; font-weight: 700; letter-spacing: 0.18em;
+      text-transform: uppercase; color: var(--cyan);
+      margin-bottom: 18px;
+    }
+
+    .headline {
+      font-size: clamp(34px, 5.2vw, 66px);
+      font-weight: 700;
+      letter-spacing: -0.032em;
+      line-height: 1.07;
+      color: #ffffff;
+    }
+    .headline .accent-cyan { color: var(--cyan); }
+    .headline .accent-pink { color: #fb7185; }
+    .headline .accent-gold { color: var(--amber); }
+
+    .hairline {
+      height: 1px; width: 100%;
+      background: linear-gradient(90deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.04));
+      margin: 26px 0 24px;
+      transform-origin: left center;
+      transition: transform 0.85s var(--ease-out-expo), opacity 0.5s ease;
+    }
+    .story-main.prepare-enter-next .hairline,
+    .story-main.prepare-enter-prev .hairline {
+      transform: scaleX(0); opacity: 0; transition: none;
+    }
+    .story-main.exit-next .hairline,
+    .story-main.exit-prev .hairline {
+      transform: scaleX(0); transform-origin: right center; opacity: 0;
+      transition: transform 0.3s var(--ease-in-expo), opacity 0.25s ease;
+    }
+
+    .lead-copy {
+      font-size: clamp(16px, 1.55vw, 20px);
+      line-height: 1.62;
+      color: var(--muted);
+      max-width: 720px;
+      font-weight: 400;
+    }
+    .lead-copy strong { color: #ffffff; font-weight: 600; }
+
+    /* Minimal Dark Editorial Motion Graphic Stage (Zero Clutter) */
+    .visual-stage {
+      margin-top: 28px;
+      width: 100%;
+      display: none;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .visual-stage.show { display: flex; }
+
+    .diagram-frame {
+      width: 100%;
+      height: 172px;
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.018);
+      position: relative;
+      overflow: hidden;
+    }
+    #story-canvas { width: 100%; height: 100%; display: block; }
+
+    .live-metrics-row {
+      display: none;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .live-metrics-row.show { display: grid; }
+    .editorial-stat {
+      padding: 14px 18px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.02);
+      display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+    }
+    .editorial-stat.cyan { border-color: rgba(34, 211, 238, 0.42); background: rgba(34, 211, 238, 0.05); }
+    .editorial-stat.pink { border-color: rgba(244, 63, 94, 0.42); background: rgba(244, 63, 94, 0.05); }
+    .editorial-stat .es-k { font-size: 11px; font-weight: 700; letter-spacing: 0.03em; color: var(--dim); }
+    .editorial-stat .es-sub { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+    .editorial-stat .es-v { font-size: 32px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+
+    .color-key {
+      display: none; gap: 24px; flex-wrap: wrap; margin-top: 26px;
+      font-size: 13px; color: var(--muted);
+    }
+    .color-key.show { display: flex; }
+    .ck-item { display: flex; align-items: center; gap: 9px; }
+    .ck-bar { width: 18px; height: 3px; border-radius: 2px; }
+
+    /* Bottom Editorial Navigation */
+    .story-footer {
+      display: flex; justify-content: space-between; align-items: center; gap: 16px;
+      padding-top: 18px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .nav-left { display: flex; align-items: center; gap: 10px; }
+    .nav-hint { font-size: 12px; color: var(--dim); margin-left: 8px; }
+
+    .btn-editorial {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 999px;
+      padding: 11px 22px;
+      font-size: 13px; font-weight: 600; letter-spacing: 0.02em;
+      cursor: pointer;
+      transition: all 0.2s var(--ease-out-expo);
+    }
+    .btn-editorial:hover:not(:disabled) {
+      color: #ffffff;
+      border-color: rgba(255, 255, 255, 0.45);
+    }
+    .btn-editorial:disabled { opacity: 0.25; cursor: default; }
+
+    .btn-editorial-primary {
+      background: #ffffff;
+      color: #050509;
+      border: 1px solid #ffffff;
+      border-radius: 999px;
+      padding: 12px 28px;
+      font-size: 13.5px; font-weight: 700; letter-spacing: 0.01em;
+      cursor: pointer;
+      transition: transform 0.2s var(--ease-out-expo), background 0.2s ease, box-shadow 0.2s ease;
+    }
+    .btn-editorial-primary:hover {
+      background: #e2e8f0;
+      transform: translateY(-1px);
+      box-shadow: 0 10px 28px rgba(255, 255, 255, 0.14);
+    }
+
+    /* ================= FULL 3D SIMULATION HUD ================= */
+    .sim-ui {
+      transition: opacity 0.65s var(--ease-out-expo), visibility 0.65s;
+    }
+    .sim-ui.hidden { opacity: 0; pointer-events: none; visibility: hidden; }
+
+    .hud-top {
+      position: fixed; top: 14px; left: 16px; right: 16px;
+      display: flex; justify-content: center; align-items: flex-start;
+      gap: 12px; pointer-events: none; z-index: 10;
+    }
+    .center-pill {
+      pointer-events: auto;
+      background: var(--panel); border: 1px solid var(--border);
+      backdrop-filter: blur(14px); border-radius: 14px;
+      padding: 10px 18px; text-align: center; min-width: 240px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+    }
+    .center-pill h1 { font-size: 14px; font-weight: 700; }
+    .center-pill .pos-readout { font-size: 12px; color: var(--cyan); margin-top: 4px; font-weight: 600; }
+    .btn-replay {
+      margin-top: 7px; background: rgba(255, 255, 255, 0.07); color: #f8fafc;
+      border: 1px solid rgba(255, 255, 255, 0.22); border-radius: 999px;
+      padding: 4px 13px; font-size: 11px; font-weight: 600; cursor: pointer;
+    }
+    .btn-replay:hover { background: rgba(255, 255, 255, 0.16); }
+
+    /* Compact Live Paper-in-Action Tracker (Top-Right) */
+    .live-paper-card {
+      position: fixed; top: 14px; right: 16px; width: 292px;
+      background: var(--panel); border: 1px solid var(--border);
+      backdrop-filter: blur(14px); border-radius: 14px;
+      padding: 10px 12px; z-index: 10;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+      pointer-events: auto;
+    }
+    .lp-head {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 11px; font-weight: 700; color: #ffffff; margin-bottom: 6px;
+    }
+    .lp-sub { font-size: 10.5px; color: var(--cyan); font-weight: 600; }
+    #sim-mini-canvas {
+      width: 100%; height: 64px; display: block;
+      border-radius: 8px; background: rgba(255, 255, 255, 0.025);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+    }
+    .lp-scores {
+      margin-top: 7px; display: flex; justify-content: space-between; align-items: center; gap: 8px;
+      font-size: 11.5px; font-variant-numeric: tabular-nums;
+    }
+    .lp-ai { color: var(--cyan); font-weight: 700; }
+    .lp-rand { color: #fb7185; font-weight: 700; }
+
+    .cockpit-bar {
+      position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%);
+      width: min(560px, calc(100vw - 32px));
+      background: var(--panel); border: 1px solid var(--border);
+      backdrop-filter: blur(16px); border-radius: 16px; padding: 12px 16px;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: center;
+      z-index: 10; box-shadow: 0 16px 42px rgba(0, 0, 0, 0.62);
+    }
+    .ctrl-col { display: flex; flex-direction: column; gap: 5px; }
+    .row { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+    .lbl { font-size: 11px; font-weight: 700; color: var(--dim); }
+    .val { font-size: 11.5px; color: var(--cyan); font-weight: 700; font-variant-numeric: tabular-nums; }
+
+    select {
+      width: 100%; background: rgba(15, 12, 26, 0.96); color: var(--text);
+      border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 8px;
+      padding: 5px 8px; font-size: 12px; outline: none; cursor: pointer;
+    }
+    input[type="range"] { width: 100%; accent-color: var(--cyan); cursor: pointer; height: 5px; }
+    #scrub-slider { accent-color: var(--pink); }
+
+    .btn-row { display: flex; gap: 6px; }
+    .btn {
+      flex: 1; background: rgba(255, 255, 255, 0.07); color: #f8fafc;
+      border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 9px;
+      padding: 7px 8px; font-size: 11.5px; font-weight: 600; cursor: pointer;
+      transition: background 0.14s;
+    }
+    .btn:hover { background: rgba(255, 255, 255, 0.16); }
+    .btn.primary { background: #ffffff; border-color: #ffffff; color: #050509; font-weight: 700; }
+
+    @media (max-width: 640px) {
+      .cockpit-bar { grid-template-columns: 1fr; }
+      .live-paper-card, .nav-hint { display: none; }
+      .live-metrics-row.show { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div id="canvas-wrap"></div>
+  <div class="reticle" id="reticle"></div>
+  <div class="jolt-banner" id="jolt-banner">Giant Bump — Big Shake on the Track</div>
+
+  <!-- ================= DEDICATED DARK EDITORIAL STORY STAGE ================= -->
+  <section class="story-stage" id="story-layer" aria-label="Interactive Story">
+    <header class="story-header">
+      <div class="brand-block">
+        <div class="brand-mark">The Shortcut Coaster</div>
+        <div class="meta-strip">
+          <span>Paper: Neural Statistical Functions (arXiv:2605.11327v1)</span>
+          <span class="meta-sep">/</span>
+          <span>NeurIPS 2026 ML Intern Reproductions</span>
+          <span class="meta-sep">/</span>
+          <a href="https://github.com/Kent0710/shortcut-coaster" target="_blank" rel="noopener noreferrer">github.com/Kent0710/shortcut-coaster</a>
+        </div>
+      </div>
+      <div class="progress-wrap">
+        <span class="step-counter" id="step-counter">01 / 12</span>
+        <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+      </div>
+    </header>
+
+    <main class="story-main active" id="story-main">
+      <h1 class="headline" id="story-headline">
+        <span class="line-mask"><span class="reveal-el d2">The Shortcut Coaster:</span></span>
+        <span class="line-mask"><span class="reveal-el d3">Measuring a wild ride <span class="accent-cyan">in 2 checks</span>.</span></span>
+      </h1>
+      <div class="hairline"></div>
+      <p class="reveal-el d4 lead-copy" id="story-body">
+        Measuring the average bumpiness of a wild track usually takes hundreds of slow checks.
+        One tiny giant spike can hide between guesses and ruin the score.
+        Click Next to see how an AI shortcut solves this problem in 2 quick checks.
+      </p>
+
+      <div class="color-key" id="color-key">
+        <span class="ck-item"><span class="ck-bar" style="background:#22d3ee"></span>Smooth track</span>
+        <span class="ck-item"><span class="ck-bar" style="background:#a855f7"></span>Small bumps</span>
+        <span class="ck-item"><span class="ck-bar" style="background:#fb7185"></span>One huge bump</span>
+        <span class="ck-item"><span class="ck-bar" style="background:#fbbf24"></span>Start and finish lines</span>
+      </div>
+
+      <div class="visual-stage show" id="visual-stage">
+        <div class="reveal-el d5 diagram-frame">
+          <canvas id="story-canvas"></canvas>
+        </div>
+        <div class="live-metrics-row" id="live-metrics-row">
+          <div class="editorial-stat" id="es-left">
+            <div>
+              <div class="es-k" id="es-lk">True Bump Score</div>
+              <div class="es-sub" id="es-ls">Exact average between the two gates</div>
+            </div>
+            <div class="es-v" id="es-lv" style="color:var(--emerald)">—</div>
+          </div>
+          <div class="editorial-stat" id="es-right">
+            <div>
+              <div class="es-k" id="es-rk">20 Random Guesses</div>
+              <div class="es-sub" id="es-rs">Jumping every second</div>
+            </div>
+            <div class="es-v" id="es-rv">—</div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <footer class="story-footer">
+      <div class="nav-left">
+        <button class="btn-editorial" id="btn-back" disabled>Previous</button>
+        <button class="btn-editorial" id="btn-skip">Skip to Ride</button>
+        <span class="nav-hint">Left and Right arrow keys work too</span>
+      </div>
+      <button class="btn-editorial-primary" id="btn-next">Next: The Goal</button>
+    </footer>
+  </section>
+
+  <!-- ================= FULL 3D SIMULATION HUD ================= -->
+  <div class="sim-ui hidden" id="sim-ui">
+    <div class="hud-top">
+      <div class="center-pill">
+        <h1>The Shortcut Coaster</h1>
+        <div class="pos-readout" id="pos-readout">Track: 0% — Smooth</div>
+        <button class="btn-replay" id="btn-replay">Replay Story</button>
+      </div>
+    </div>
+
+    <div class="live-paper-card">
+      <div class="lp-head">
+        <span>Paper in Action (20% to 80%)</span>
+        <span class="lp-sub" id="lp-true">True: —</span>
+      </div>
+      <canvas id="sim-mini-canvas"></canvas>
+      <div class="lp-scores">
+        <span class="lp-ai" id="lp-ai">AI (2 checks): —</span>
+        <span class="lp-rand" id="lp-rand">20 Random: —</span>
+      </div>
+    </div>
+
+    <div class="cockpit-bar">
+      <div class="ctrl-col">
+        <div class="row"><span class="lbl">Pick a Track</span></div>
+        <select id="track-select"></select>
+        <div class="btn-row" style="margin-top:3px;">
+          <button class="btn primary" id="btn-play">Pause</button>
+          <button class="btn" id="btn-cam">Outside View</button>
+        </div>
+      </div>
+
+      <div class="ctrl-col">
+        <div class="row"><span class="lbl" style="color:var(--pink)">Track Position</span><span class="val" id="scrub-val" style="color:var(--pink)">0%</span></div>
+        <input type="range" id="scrub-slider" min="0" max="0.995" step="0.002" value="0.00" />
+        <div class="row"><span class="lbl">Ride Speed</span><span class="val" id="spd-num">1.0x</span></div>
+        <input type="range" id="speed-slider" min="0.2" max="2.2" step="0.1" value="1.0" />
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+  <script src="game_data.js"></script>
+  <script>
+    (function () {
+      const DATA = window.NSF_GAME_DATA;
+      if (!DATA || !DATA.trajectories || !DATA.trajectories.length) {
+        document.body.innerHTML = '<div style="padding:40px;color:#fff;font-family:sans-serif">Could not load track data.</div>';
+        return;
+      }
+
+      const N = DATA.n_points, NM1 = N - 1;
+      function interp(arr, tPos) {
+        const c = Math.max(0, Math.min(1, tPos));
+        const f = c * NM1;
+        const i = Math.min(NM1 - 1, Math.floor(f));
+        const frac = f - i;
+        return arr[i] * (1 - frac) + arr[i + 1] * frac;
+      }
+      function exactAverage(tr, a, b) {
+        return (interp(tr.cum, b) - interp(tr.cum, a)) / Math.max(1e-6, b - a);
+      }
+      function aiTripMeterAverage(tr, a, b) {
+        const endReading = b * interp(tr.nsf, b);
+        const startReading = a > 1e-6 ? a * interp(tr.nsf, a) : 0;
+        return (endReading - startReading) / Math.max(1e-6, b - a);
+      }
+      function randomSpotChecks(tr, a, b, count) {
+        let sum = 0;
+        const span = b - a;
+        const pts = [];
+        for (let k = 0; k < count; k++) {
+          const u = a + Math.random() * span;
+          pts.push(u);
+          sum += interp(tr.h, u);
+        }
+        return { avg: sum / count, pts };
+      }
+      function accuracyPct(guess, truth) {
+        const relErr = Math.abs(guess - truth) / Math.max(1e-6, truth);
+        return Math.max(0, (1 - relErr) * 100);
+      }
+      function findPeakU(tr) {
+        let bestIdx = 0;
+        for (let i = 1; i < N; i++) if (tr.h[i] > tr.h[bestIdx]) bestIdx = i;
+        return bestIdx / NM1;
+      }
+
+      // ---- 13-Step Grade-Schooler STE Story Definitions ----
+      const STEPS = [
+        {
+          counter: "01 / 13",
+          lines: [
+            'The Shortcut Coaster:',
+            'Measuring a wild ride <span class="accent-cyan">in 2 checks</span>.'
+          ],
+          body: "Measuring the average bumpiness of a wild track usually takes hundreds of slow checks. One tiny giant spike can hide between guesses and ruin the score. Click Next to see how an AI shortcut solves this problem in 2 quick checks.",
+          nextLabel: "Next: Picture It as a Ride",
+          showKey: false,
+          diagram: "cover_problem",
+        },
+        {
+          counter: "02 / 13",
+          lines: [
+            'Turn that bumpy line into',
+            'a <span class="accent-cyan">3D rollercoaster tunnel</span>.'
+          ],
+          body: "To make this easy to feel, turn that flat line into a 3D rollercoaster tunnel. Flat parts of the line become smooth blue rings. Tall spikes become glowing red rings that shake the ride.",
+          nextLabel: "Next: See the Ride",
+          showKey: false,
+          diagram: "bridge_coaster",
+        },
+        {
+          counter: "03 / 13",
+          lines: [
+            'How bumpy is this ride?',
+            'The AI needs only <span class="accent-cyan">2 checks</span>.'
+          ],
+          body: "This tunnel is a rollercoaster track. <strong>Blue rings</strong> mean a smooth ride. <strong>Purple rings</strong> mean small bumps. <strong>Red rings</strong> mean one huge bump. Click Next to see how the AI measures the bumps.",
+          nextLabel: "Next: The Goal",
+          showKey: true,
+          diagram: "none",
+        },
+        {
+          counter: "04 / 13",
+          lines: [
+            'Measure one part of the track',
+            'between <span class="accent-gold">two lines</span>.'
+          ],
+          body: "Imagine a track running from <strong>0% at the start</strong> to <strong>100% at the end</strong>. Pick any two lines along the track, like the <strong>blue line at 20%</strong> and the <strong>gold line at 80%</strong>. The goal is to find the average bump score inside that shaded part without checking every inch.",
+          nextLabel: "Next: The Giant Bump",
+          showKey: false,
+          diagram: "gates",
+        },
+        {
+          counter: "05 / 13",
+          lines: [
+            'Watch out for one',
+            '<span class="accent-pink">tiny, giant bump</span>.'
+          ],
+          body: "Look at the line below. Most of the track has small waves. Then one <strong>giant red spike</strong> shoots straight up. That big bump is super narrow, so it is very easy to miss.",
+          nextLabel: "Next: Why Guessing Fails",
+          showKey: false,
+          diagram: "jolt",
+        },
+        {
+          counter: "06 / 13",
+          lines: [
+            '20 random guesses',
+            '<span class="accent-pink">keep missing the spike</span>.'
+          ],
+          body: "The old way picks <strong>20 random pink spots</strong> between the blue line and gold line. Most spots miss the tiny red spike. Sometimes one spot hits the spike by luck. That makes the guess jump up and down.",
+          nextLabel: "Next: The Running Total",
+          showKey: false,
+          diagram: "random",
+        },
+        {
+          counter: "07 / 13",
+          lines: [
+            'Imagine a counter that',
+            '<span class="accent-cyan">adds up every bump</span>.'
+          ],
+          body: "Picture a mileage counter on a rollercoaster car. At 0% on the far left, the counter reads zero. As the car rolls forward, the counter adds every bump it passes. Even the <strong>giant red spike</strong> gets added into the rising total.",
+          nextLabel: "Next: The Subtraction Trick",
+          showKey: false,
+          diagram: "running_total",
+        },
+        {
+          counter: "08 / 13",
+          lines: [
+            'Subtract two totals to',
+            'keep <span class="accent-gold">only 20% to 80%</span>.'
+          ],
+          body: "The total at the <strong>blue line (20%)</strong> adds up every bump from <strong>0% to 20%</strong>. The total at the <strong>gold line (80%)</strong> adds up every bump from <strong>0% to 80%</strong>. Subtract the <strong>0% to 20%</strong> total from the <strong>0% to 80%</strong> total. Only the bumps between 20% and 80% remain.",
+          nextLabel: "Next: Try It With 10 Numbers",
+          showKey: false,
+          diagram: "subtract",
+        },
+        {
+          counter: "09 / 13",
+          lines: [
+            'See the same trick with',
+            '<span class="accent-cyan">10 simple numbers</span>.'
+          ],
+          body: "Imagine the track is just 10 bump numbers in a row. <strong>Box 5</strong> holds the giant bump of <strong>40</strong>. The goal is to add up only the green middle section from <strong>Box 3 to Box 8</strong>.",
+          nextLabel: "Next: Build Running Totals",
+          showKey: false,
+          diagram: "arr_raw",
+        },
+        {
+          counter: "10 / 13",
+          lines: [
+            'Build a second row that',
+            '<span class="accent-cyan">adds from Box 1</span>.'
+          ],
+          body: "Each box in the bottom row adds every bump from <strong>Box 1</strong> up to that spot. Notice how Box 5 jumps from <strong>11</strong> straight to <strong>51</strong> when it adds the giant bump of 40.",
+          nextLabel: "Next: 2 Lookups, 1 Subtraction",
+          showKey: false,
+          diagram: "arr_cum",
+        },
+        {
+          counter: "11 / 13",
+          lines: [
+            'Check 2 boxes. Subtract.',
+            '<span class="accent-gold">Divide by 6 boxes.</span>'
+          ],
+          body: "Read just 2 boxes from the bottom row: <strong>Box 2 (5)</strong> on the left and <strong>Box 8 (59)</strong> on the right. Subtract 5 from 59 to get the middle total of <strong>54</strong>. Now divide 54 by <strong>6 (the 6 green boxes, Box 3 to Box 8)</strong> to get the exact average of <strong>9</strong>.",
+          nextLabel: "Next: How the AI Knows It",
+          showKey: false,
+          diagram: "arr_sub",
+        },
+        {
+          counter: "12 / 13",
+          lines: [
+            'The AI learns this counter',
+            '<span class="accent-cyan">ahead of time</span>.'
+          ],
+          body: "During practice, the AI studies thousands of tracks and learns to predict that running total at any spot. At ride time, the AI does not roll down the whole track. It looks up the blue line total and gold line total in one flash.",
+          nextLabel: "Next: See the Result",
+          showKey: false,
+          diagram: "ai_learn",
+        },
+        {
+          counter: "13 / 13",
+          lines: [
+            'Check 20%. Check 80%.',
+            'Subtract. <span class="accent-cyan">Done in 2 checks.</span>'
+          ],
+          body: "Divide that leftover total by the distance between the blue line (20%) and gold line (80%). That gives the average bump score in just <strong>2 quick checks</strong>. No random guessing, no missed spikes, and a steady score every time.",
+          nextLabel: "Start 3D Ride",
+          showKey: false,
+          diagram: "ai",
+        },
+      ];
+
+      // ---- Minimal 2D Editorial Diagram Canvas (for Story Slides 2-5) ----
+      const storyCanvas = document.getElementById("story-canvas");
+      const sctx = storyCanvas.getContext("2d");
+      let storyDarts = [];
+      let storyAnimT = 0;
+
+      function resizeStoryCanvas() {
+        const rect = storyCanvas.getBoundingClientRect();
+        if (rect.width < 10 || rect.height < 10) return;
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        storyCanvas.width = Math.floor(rect.width * dpr);
+        storyCanvas.height = Math.floor(rect.height * dpr);
+        sctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
+
+      function drawEditorialDiagram(dt) {
+        const st = STEPS[storyStep];
+        if (st.diagram === "none") return;
+        const rect = storyCanvas.getBoundingClientRect();
+        const W = rect.width, H = rect.height;
+        if (W < 10 || H < 10) return;
+        storyAnimT = Math.min(1, storyAnimT + dt * 1.4);
+
+        const tr = DATA.trajectories[trackIdx];
+        const padX = 28, padY = 20;
+        const plotW = W - padX * 2, plotH = H - padY * 2;
+        const xOf = (u) => padX + u * plotW;
+        const yOf = (hVal) => H - padY - Math.min(1, hVal / Math.max(1, tr.h_max)) * plotH * 0.92;
+
+        sctx.clearRect(0, 0, W, H);
+
+        // Subtle baseline + full-track 0% / 100% labels
+        sctx.strokeStyle = "rgba(255,255,255,0.08)";
+        sctx.lineWidth = 1;
+        sctx.beginPath();
+        sctx.moveTo(padX, H - padY);
+        sctx.lineTo(W - padX, H - padY);
+        sctx.stroke();
+        sctx.fillStyle = "rgba(161,161,170,0.65)";
+        sctx.font = "600 10px -apple-system, Inter, sans-serif";
+        sctx.fillText("0% Track Start", padX, H - 5);
+        sctx.fillText("100% Track End", W - padX - 76, H - 5);
+
+        // Helper: draw clean pill label so text NEVER overlaps lines
+        const drawPill = (text, x, y, textColor, borderColor) => {
+          sctx.font = "700 10.5px -apple-system, Inter, sans-serif";
+          const tw = sctx.measureText(text).width;
+          const px = Math.max(padX, Math.min(W - padX - tw - 12, x));
+          const py = Math.max(14, Math.min(H - 12, y));
+          sctx.fillStyle = "rgba(8, 7, 16, 0.90)";
+          sctx.fillRect(px, py - 11, tw + 10, 16);
+          sctx.strokeStyle = borderColor;
+          sctx.lineWidth = 1;
+          sctx.strokeRect(px, py - 11, tw + 10, 16);
+          sctx.fillStyle = textColor;
+          sctx.fillText(text, px + 5, py + 1);
+        };
+
+        // Helper: draw vertical Blue Start Gate (20%) & Gold Finish Gate (80%) lines consistently
+        const drawGateLines = (emphasized) => {
+          const gx0 = xOf(startPct), gx1 = xOf(endPct);
+          const drawOne = (x, color, label) => {
+            sctx.strokeStyle = color;
+            sctx.lineWidth = emphasized ? 2.4 : 1.5;
+            sctx.setLineDash(emphasized ? [] : [4, 4]);
+            sctx.beginPath();
+            sctx.moveTo(x, 12);
+            sctx.lineTo(x, H - padY);
+            sctx.stroke();
+            sctx.setLineDash([]);
+            sctx.fillStyle = color;
+            sctx.font = "700 10px -apple-system, Inter, sans-serif";
+            sctx.fillText(label, x + 6, 20);
+            if (emphasized) {
+              sctx.beginPath();
+              sctx.arc(x, H - padY, 4.5, 0, Math.PI * 2);
+              sctx.fill();
+            }
+          };
+          drawOne(gx0, "#22d3ee", "Blue Line 20%");
+          drawOne(gx1, "#fbbf24", "Gold Line 80%");
+        };
+
+        // ---- Diagram Mode: Opening Cover Problem Graph (Step 1) ----
+        if (st.diagram === "cover_problem") {
+          const maxIdx = Math.max(2, Math.floor(N * storyAnimT));
+          sctx.beginPath();
+          for (let i = 0; i < maxIdx; i++) {
+            const x = xOf(i / NM1), y = yOf(tr.h[i]);
+            if (i === 0) sctx.moveTo(x, y); else sctx.lineTo(x, y);
+          }
+          sctx.strokeStyle = "#a855f7";
+          sctx.lineWidth = 2.0;
+          sctx.stroke();
+
+          // Highlight the problem: giant hidden spike + slow check dots
+          const pkU = findPeakU(tr);
+          const px = xOf(pkU), py = yOf(tr.h_max);
+          const pulse = 7 + Math.sin(performance.now() * 0.006) * 3;
+          sctx.beginPath();
+          sctx.arc(px, py, pulse, 0, Math.PI * 2);
+          sctx.strokeStyle = "rgba(244,63,94,0.85)";
+          sctx.lineWidth = 2;
+          sctx.stroke();
+          sctx.beginPath();
+          sctx.arc(px, py, 3.8, 0, Math.PI * 2);
+          sctx.fillStyle = "#fb7185";
+          sctx.fill();
+
+          drawPill("Problem: How to measure this wild track fast?", padX, 28, "#22d3ee", "rgba(34,211,238,0.45)");
+          drawPill("Tiny giant spike hides from slow guesses", px + 12, py + 4, "#fda4af", "rgba(244,63,94,0.55)");
+          return;
+        }
+
+        // ---- Diagram Mode: Bridge from Flat Graph to 3D Rollercoaster Tunnel (Step 2) ----
+        if (st.diagram === "bridge_coaster") {
+          sctx.clearRect(0, 0, W, H);
+          const leftW = W * 0.40;
+          const midArrowX = W * 0.47;
+          const rightCenterX = W * 0.72;
+          const rightCenterY = H * 0.50;
+
+          // Left: Mini bump graph
+          sctx.beginPath();
+          for (let i = 0; i < N; i += 2) {
+            const u = i / NM1;
+            const x = padX + u * (leftW - padX);
+            const y = H - 30 - Math.min(1, tr.h[i] / Math.max(1, tr.h_max)) * (H - 64);
+            if (i === 0) sctx.moveTo(x, y); else sctx.lineTo(x, y);
+          }
+          sctx.strokeStyle = "#a855f7";
+          sctx.lineWidth = 1.8;
+          sctx.stroke();
+          drawPill("Flat Bump Graph", padX, 24, "#cbd5e1", "rgba(168,85,247,0.45)");
+
+          // Center transition arrow
+          sctx.strokeStyle = "#22d3ee";
+          sctx.lineWidth = 2;
+          sctx.beginPath();
+          sctx.moveTo(midArrowX - 18, rightCenterY);
+          sctx.lineTo(midArrowX + 18, rightCenterY);
+          sctx.lineTo(midArrowX + 10, rightCenterY - 6);
+          sctx.moveTo(midArrowX + 18, rightCenterY);
+          sctx.lineTo(midArrowX + 10, rightCenterY + 6);
+          sctx.stroke();
+
+          // Right: Animated 3D tunnel rings matching real bump colors
+          const numRings = 11;
+          const phase = (performance.now() * 0.0012) % 1;
+          for (let r = numRings - 1; r >= 0; r--) {
+            const frac = (r + phase) / numRings;
+            const radius = 14 + (1 - frac) * 44;
+            const cx = rightCenterX + Math.sin(frac * 5) * 14;
+            const cy = rightCenterY + Math.cos(frac * 4) * 6;
+            const isHot = r === 4 || r === 5;
+            sctx.beginPath();
+            sctx.ellipse(cx, cy, radius * 1.15, radius * 0.78, 0, 0, Math.PI * 2);
+            sctx.strokeStyle = isHot ? "rgba(251,113,133,0.9)" : (r % 2 === 0 ? "rgba(34,211,238,0.65)" : "rgba(168,85,247,0.55)");
+            sctx.lineWidth = isHot ? 2.4 : 1.5;
+            sctx.stroke();
+          }
+          drawPill("3D Rollercoaster Tunnel", rightCenterX - 68, 24, "#22d3ee", "rgba(34,211,238,0.45)");
+          return;
+        }
+
+        // ---- Diagram Mode: 10-Number Algorithm Visualizer (Steps 9, 10, 11) ----
+        if (st.diagram === "arr_raw" || st.diagram === "arr_cum" || st.diagram === "arr_sub") {
+          const vals = [2, 3, 2, 4, 40, 3, 2, 3, 3, 2];
+          const cums = [2, 5, 7, 11, 51, 54, 56, 59, 62, 64];
+          const leftLabelW = 104;
+          const availW = W - padX * 2 - leftLabelW;
+          const gap = 6;
+          const boxW = Math.max(26, (availW - gap * 9) / 10);
+          const startX = padX + leftLabelW;
+
+          // Clear baseline text for clean algorithm board
+          sctx.clearRect(0, 0, W, H);
+
+          const drawBoxRow = (y, rowLabel, arr, modeKind) => {
+            sctx.fillStyle = "#a1a1aa";
+            sctx.font = "700 10.5px -apple-system, Inter, sans-serif";
+            sctx.fillText(rowLabel, padX, y + 20);
+
+            const revealCount = modeKind === "cum" ? Math.max(1, Math.ceil(10 * storyAnimT)) : 10;
+            for (let i = 0; i < 10; i++) {
+              const bx = startX + i * (boxW + gap);
+              const boxNum = i + 1;
+              const inMid = boxNum >= 3 && boxNum <= 8;
+              const isSpike = boxNum === 5;
+              const visible = i < revealCount;
+
+              let bg = "rgba(255,255,255,0.03)";
+              let brd = "rgba(255,255,255,0.12)";
+              let txt = "#cbd5e1";
+
+              if (modeKind === "raw") {
+                if (isSpike) {
+                  bg = "rgba(244,63,94,0.20)"; brd = "#fb7185"; txt = "#fff1f2";
+                } else if (inMid) {
+                  bg = "rgba(52,211,153,0.12)"; brd = "rgba(52,211,153,0.55)"; txt = "#a7f3d0";
+                }
+              } else if (modeKind === "cum") {
+                if (isSpike && visible) {
+                  bg = "rgba(244,63,94,0.16)"; brd = "#fb7185"; txt = "#fecdd3";
+                } else if (visible) {
+                  bg = "rgba(34,211,238,0.10)"; brd = "rgba(34,211,238,0.45)"; txt = "#cffafe";
+                }
+              } else if (modeKind === "sub") {
+                if (boxNum === 2) {
+                  bg = "rgba(34,211,238,0.22)"; brd = "#22d3ee"; txt = "#ffffff";
+                } else if (boxNum === 8) {
+                  bg = "rgba(251,191,36,0.22)"; brd = "#fbbf24"; txt = "#ffffff";
+                } else {
+                  bg = "rgba(255,255,255,0.02)"; brd = "rgba(255,255,255,0.08)"; txt = "#71717a";
+                }
+              }
+
+              sctx.fillStyle = bg;
+              sctx.fillRect(bx, y, boxW, 30);
+              sctx.strokeStyle = brd;
+              sctx.lineWidth = (modeKind === "sub" && (boxNum === 2 || boxNum === 8)) ? 2 : 1;
+              sctx.strokeRect(bx, y, boxW, 30);
+
+              if (visible) {
+                sctx.fillStyle = txt;
+                sctx.font = "700 13px -apple-system, Inter, sans-serif";
+                const label = String(arr[i]);
+                const tw = sctx.measureText(label).width;
+                sctx.fillText(label, bx + (boxW - tw) / 2, y + 20);
+              }
+            }
+          };
+
+          // Box numbers 1..10 along top
+          sctx.font = "600 9.5px -apple-system, Inter, sans-serif";
+          for (let i = 0; i < 10; i++) {
+            const bx = startX + i * (boxW + gap);
+            const lbl = `Box ${i + 1}`;
+            const tw = sctx.measureText(lbl).width;
+            sctx.fillStyle = (i + 1 >= 3 && i + 1 <= 8) ? "#34d399" : "#71717a";
+            sctx.fillText(lbl, bx + (boxW - tw) / 2, 18);
+          }
+
+          if (st.diagram === "arr_raw") {
+            drawBoxRow(34, "Bump Score", vals, "raw");
+            // Bracket under Box 3 to Box 8
+            const x3 = startX + 2 * (boxW + gap);
+            const x8 = startX + 7 * (boxW + gap) + boxW;
+            sctx.strokeStyle = "#34d399";
+            sctx.lineWidth = 1.6;
+            sctx.beginPath();
+            sctx.moveTo(x3, 76); sctx.lineTo(x3, 84); sctx.lineTo(x8, 84); sctx.lineTo(x8, 76);
+            sctx.stroke();
+            drawPill("Middle Section (Box 3 to Box 8): 2 + 4 + 40 + 3 + 2 + 3 = 54  (6 boxes)", x3 + 8, 126, "#34d399", "rgba(52,211,153,0.5)");
+          } else if (st.diagram === "arr_cum") {
+            drawBoxRow(28, "Bump Score", vals, "raw");
+            drawBoxRow(74, "Running Total", cums, "cum");
+            drawPill("Each box adds all bumps from Box 1 up to here  (Box 5 jumps 11 -> 51)", startX, 146, "#22d3ee", "rgba(34,211,238,0.45)");
+          } else {
+            drawBoxRow(28, "Bump Score", vals, "raw");
+            drawBoxRow(74, "Running Total", cums, "sub");
+            drawPill("Total: 59 - 5 = 54   |   Average: 54 / 6 (Box 3 to Box 8) = 9   (Only 2 Checks)", startX, 146, "#fbbf24", "rgba(251,191,36,0.55)");
+          }
+          return;
+        }
+
+        // ---- Diagram Mode: Running Total (Step 5) & AI Learned Counter (Step 7) ----
+        if (st.diagram === "running_total" || st.diagram === "ai_learn") {
+          const cumMax = Math.max(1e-6, tr.cum[NM1]);
+          const yCum = (val) => H - padY - Math.min(1, val / cumMax) * plotH * 0.84;
+          const maxIdx = Math.max(2, Math.floor(N * storyAnimT));
+
+          // Always keep Blue & Gold gate lines visible for continuity
+          drawGateLines(st.diagram === "ai_learn");
+
+          // Faint bump curve underneath for context
+          sctx.beginPath();
+          for (let i = 0; i < N; i++) {
+            const x = xOf(i / NM1), y = yOf(tr.h[i]);
+            if (i === 0) sctx.moveTo(x, y); else sctx.lineTo(x, y);
+          }
+          sctx.strokeStyle = "rgba(255,255,255,0.13)";
+          sctx.lineWidth = 1.2;
+          sctx.stroke();
+
+          // True running total curve
+          sctx.beginPath();
+          for (let i = 0; i < maxIdx; i++) {
+            const x = xOf(i / NM1), y = yCum(tr.cum[i]);
+            if (i === 0) sctx.moveTo(x, y); else sctx.lineTo(x, y);
+          }
+          sctx.strokeStyle = st.diagram === "ai_learn" ? "rgba(52,211,153,0.75)" : "#22d3ee";
+          sctx.lineWidth = st.diagram === "ai_learn" ? 2.0 : 2.6;
+          if (st.diagram === "ai_learn") sctx.setLineDash([5, 4]);
+          sctx.stroke();
+          sctx.setLineDash([]);
+
+          if (st.diagram === "running_total") {
+            const pkU = findPeakU(tr);
+            const px = xOf(pkU), py = yCum(interp(tr.cum, pkU));
+            sctx.fillStyle = "#fb7185";
+            sctx.beginPath();
+            sctx.arc(px, py, 4.5, 0, Math.PI * 2);
+            sctx.fill();
+            drawPill("Giant bump jumps total up", px + 10, py - 12, "#fda4af", "rgba(244,63,94,0.5)");
+          } else {
+            sctx.beginPath();
+            for (let i = 0; i < maxIdx; i++) {
+              const u = i / NM1;
+              const aiCum = u * tr.nsf[i];
+              const x = xOf(u), y = yCum(aiCum);
+              if (i === 0) sctx.moveTo(x, y); else sctx.lineTo(x, y);
+            }
+            sctx.strokeStyle = "#22d3ee";
+            sctx.lineWidth = 2.4;
+            sctx.stroke();
+
+            [startPct, endPct].forEach((u, idx) => {
+              const x = xOf(u), y = yCum(u * interp(tr.nsf, u));
+              sctx.fillStyle = idx === 0 ? "#22d3ee" : "#fbbf24";
+              sctx.beginPath();
+              sctx.arc(x, y, 5.5, 0, Math.PI * 2);
+              sctx.fill();
+            });
+            drawPill("Solid Blue: AI Counter  |  Dashed Green: True Counter", padX, 34, "#e2e8f0", "rgba(34,211,238,0.4)");
+          }
+          return;
+        }
+
+        // ---- Diagram Mode: Subtraction directly on the SAME Running Total Graph (Step 6) ----
+        if (st.diagram === "subtract") {
+          const cumMax = Math.max(1e-6, tr.cum[NM1]);
+          const yCum = (val) => H - padY - Math.min(1, val / cumMax) * plotH * 0.84;
+          const tGold = interp(tr.cum, endPct);
+          const tBlue = interp(tr.cum, startPct);
+          const goldInt = Math.round(tGold);
+          const blueInt = Math.round(tBlue);
+          const midInt = goldInt - blueInt;
+
+          const gx0 = xOf(startPct), gx1 = xOf(endPct);
+          const y0 = yCum(tBlue), y1 = yCum(tGold);
+
+          // Shaded middle window [20%, 80%]
+          sctx.fillStyle = "rgba(52,211,153,0.06)";
+          sctx.fillRect(gx0, 12, gx1 - gx0, H - padY - 12);
+
+          // Draw clear vertical Blue Gate (20%) & Gold Gate (80%) lines!
+          drawGateLines(false);
+
+          // Faint bump curve underneath for continuity
+          sctx.beginPath();
+          for (let i = 0; i < N; i++) {
+            const x = xOf(i / NM1), y = yOf(tr.h[i]);
+            if (i === 0) sctx.moveTo(x, y); else sctx.lineTo(x, y);
+          }
+          sctx.strokeStyle = "rgba(255,255,255,0.12)";
+          sctx.lineWidth = 1.2;
+          sctx.stroke();
+
+          // Part 1: 0% -> 20% (Blue Total)
+          sctx.beginPath();
+          const i0 = Math.floor(startPct * NM1);
+          const i1 = Math.floor(endPct * NM1);
+          for (let i = 0; i <= i0; i++) {
+            const x = xOf(i / NM1), y = yCum(tr.cum[i]);
+            if (i === 0) sctx.moveTo(x, y); else sctx.lineTo(x, y);
+          }
+          sctx.strokeStyle = "rgba(34,211,238,0.65)";
+          sctx.lineWidth = 2.2;
+          sctx.stroke();
+
+          // Part 2: 20% -> 80% (Bright emerald green — Middle Only)
+          sctx.beginPath();
+          const curEnd = Math.max(i0 + 1, Math.floor(i0 + (i1 - i0) * storyAnimT));
+          for (let i = i0; i <= curEnd; i++) {
+            const x = xOf(i / NM1), y = yCum(tr.cum[i]);
+            if (i === i0) sctx.moveTo(x, y); else sctx.lineTo(x, y);
+          }
+          sctx.strokeStyle = "#34d399";
+          sctx.lineWidth = 3.0;
+          sctx.stroke();
+
+          // Part 3: 80% -> 100% (faint tail)
+          sctx.beginPath();
+          for (let i = i1; i < N; i++) {
+            const x = xOf(i / NM1), y = yCum(tr.cum[i]);
+            if (i === i1) sctx.moveTo(x, y); else sctx.lineTo(x, y);
+          }
+          sctx.strokeStyle = "rgba(255,255,255,0.18)";
+          sctx.lineWidth = 1.5;
+          sctx.stroke();
+
+          // Horizontal dashed guide from Blue Gate height across to Gold Gate
+          sctx.strokeStyle = "rgba(34,211,238,0.5)";
+          sctx.lineWidth = 1.2;
+          sctx.setLineDash([4, 4]);
+          sctx.beginPath();
+          sctx.moveTo(gx0, y0);
+          sctx.lineTo(gx1, y0);
+          sctx.stroke();
+          sctx.setLineDash([]);
+
+          // Vertical emerald height difference bar at Gold Gate
+          sctx.strokeStyle = "#34d399";
+          sctx.lineWidth = 2.8;
+          sctx.beginPath();
+          sctx.moveTo(gx1, y0);
+          sctx.lineTo(gx1, y0 + (y1 - y0) * storyAnimT);
+          sctx.stroke();
+
+          // Dots & crisp non-overlapping pill labels ABOVE curves
+          sctx.fillStyle = "#22d3ee";
+          sctx.beginPath(); sctx.arc(gx0, y0, 5.5, 0, Math.PI * 2); sctx.fill();
+          drawPill(`Blue Total = ${blueInt}`, gx0 + 8, y0 - 16, "#22d3ee", "rgba(34,211,238,0.55)");
+
+          sctx.fillStyle = "#fbbf24";
+          sctx.beginPath(); sctx.arc(gx1, y1, 5.5, 0, Math.PI * 2); sctx.fill();
+          drawPill(`Gold Total = ${goldInt}`, gx1 + 10, y1 - 12, "#fbbf24", "rgba(251,191,36,0.55)");
+
+          const midY = (y0 + y1) * 0.5 + 4;
+          drawPill(`${goldInt} - ${blueInt} = ${midInt}`, gx1 + 10, midY, "#34d399", "rgba(52,211,153,0.65)");
+          return;
+        }
+
+        // Shaded active gate interval [startPct, endPct]
+        const gx0 = xOf(startPct), gx1 = xOf(endPct);
+        sctx.fillStyle = st.diagram === "ai" ? "rgba(34,211,238,0.08)" : "rgba(255,255,255,0.035)";
+        sctx.fillRect(gx0, padY * 0.5, gx1 - gx0, H - padY * 1.5);
+
+        // Draw real energy curve progressively with storyAnimT
+        const maxIdx = Math.max(2, Math.floor(N * storyAnimT));
+        sctx.beginPath();
+        for (let i = 0; i < maxIdx; i++) {
+          const u = i / NM1;
+          const x = xOf(u), y = yOf(tr.h[i]);
+          if (i === 0) sctx.moveTo(x, y); else sctx.lineTo(x, y);
+        }
+        sctx.strokeStyle = st.diagram === "jolt" ? "rgba(248,250,252,0.55)" : "rgba(168,85,247,0.75)";
+        sctx.lineWidth = 1.8;
+        sctx.stroke();
+
+        // Highlight peak jolt on Step 3
+        if (st.diagram === "jolt") {
+          const pkU = findPeakU(tr);
+          const px = xOf(pkU), py = yOf(tr.h_max);
+          const pulse = 7 + Math.sin(performance.now() * 0.007) * 3;
+          sctx.beginPath();
+          sctx.arc(px, py, pulse, 0, Math.PI * 2);
+          sctx.strokeStyle = "rgba(244,63,94,0.85)";
+          sctx.lineWidth = 2;
+          sctx.stroke();
+          sctx.beginPath();
+          sctx.arc(px, py, 3.5, 0, Math.PI * 2);
+          sctx.fillStyle = "#fb7185";
+          sctx.fill();
+          sctx.fillStyle = "#fda4af";
+          sctx.font = "600 11px -apple-system, Inter, sans-serif";
+          sctx.fillText("Giant Bump", Math.min(W - 90, px + 12), Math.max(22, py + 4));
+        }
+
+        // Draw 20 random pink pins on Step 4
+        if (st.diagram === "random") {
+          storyDarts.forEach((u) => {
+            const dx = xOf(u), dy = yOf(interp(tr.h, u));
+            sctx.strokeStyle = "rgba(244,63,94,0.38)";
+            sctx.lineWidth = 1;
+            sctx.beginPath();
+            sctx.moveTo(dx, H - padY);
+            sctx.lineTo(dx, dy);
+            sctx.stroke();
+            sctx.fillStyle = "#f43f5e";
+            sctx.beginPath();
+            sctx.arc(dx, dy, 3, 0, Math.PI * 2);
+            sctx.fill();
+          });
+        }
+
+        // Gate vertical lines (Blue Start & Gold Finish)
+        const drawGateLine = (x, color, label, emphasized) => {
+          sctx.strokeStyle = color;
+          sctx.lineWidth = emphasized ? 2.5 : 1.5;
+          sctx.setLineDash(emphasized ? [] : [4, 4]);
+          sctx.beginPath();
+          sctx.moveTo(x, 12);
+          sctx.lineTo(x, H - padY);
+          sctx.stroke();
+          sctx.setLineDash([]);
+          sctx.fillStyle = color;
+          sctx.font = "700 10.5px -apple-system, Inter, sans-serif";
+          sctx.fillText(label, x + 6, 22);
+          if (emphasized) {
+            sctx.beginPath();
+            sctx.arc(x, H - padY, 5, 0, Math.PI * 2);
+            sctx.fill();
+          }
+        };
+        drawGateLine(gx0, "#22d3ee", "Blue Line 20%", st.diagram === "ai");
+        drawGateLine(gx1, "#fbbf24", "Gold Line 80%", st.diagram === "ai");
+      }
+
+      // ---- Cinematic Story Transitions (Awwwards Masked Line Slide) ----
+      let mode = "story";
+      let storyStep = 0;
+      let isTransitioning = false;
+      let trackIdx = 16; // Default track with giant bump centered at ~46%, cleanly inside 20%-80%
+      let startPct = 0.20, endPct = 0.80;
+      let randTimer = 0;
+
+      const storyStage = document.getElementById("story-layer");
+      const storyMain = document.getElementById("story-main");
+      const simUi = document.getElementById("sim-ui");
+      const canvasWrap = document.getElementById("canvas-wrap");
+
+      function populateStoryContent(idx) {
+        const st = STEPS[idx];
+        document.getElementById("step-counter").textContent = st.counter;
+        document.getElementById("progress-fill").style.width = `${((idx + 1) / STEPS.length) * 100}%`;
+        document.getElementById("story-headline").innerHTML = st.lines
+          .map((ln, i) => `<span class="line-mask"><span class="reveal-el d${i + 2}">${ln}</span></span>`)
+          .join("");
+        document.getElementById("story-body").innerHTML = st.body;
+        document.getElementById("btn-next").textContent = st.nextLabel;
+        document.getElementById("btn-back").disabled = idx === 0;
+        document.getElementById("color-key").classList.toggle("show", st.showKey);
+
+        const visStage = document.getElementById("visual-stage");
+        const metricsRow = document.getElementById("live-metrics-row");
+        visStage.classList.toggle("show", st.diagram !== "none");
+
+        const tr = DATA.trajectories[trackIdx];
+        const truth = exactAverage(tr, startPct, endPct);
+        storyAnimT = 0;
+
+        if (st.diagram === "random") {
+          metricsRow.classList.add("show");
+          document.getElementById("es-left").className = "editorial-stat";
+          document.getElementById("es-right").className = "editorial-stat pink";
+          document.getElementById("es-lv").textContent = truth.toFixed(0);
+          document.getElementById("es-rk").textContent = "20 Random Guesses";
+          document.getElementById("es-rv").style.color = "#fb7185";
+          updateStoryRandomSample();
+          randTimer = 0;
+        } else if (st.diagram === "ai") {
+          metricsRow.classList.add("show");
+          const aiVal = aiTripMeterAverage(tr, startPct, endPct);
+          const acc = accuracyPct(aiVal, truth);
+          document.getElementById("es-left").className = "editorial-stat";
+          document.getElementById("es-right").className = "editorial-stat cyan";
+          document.getElementById("es-lv").textContent = truth.toFixed(0);
+          document.getElementById("es-rk").textContent = "AI Shortcut (2 Checks)";
+          document.getElementById("es-rv").textContent = aiVal.toFixed(0);
+          document.getElementById("es-rv").style.color = "#22d3ee";
+          document.getElementById("es-rs").textContent = `${acc.toFixed(1)}% accurate — steady every time`;
+        } else {
+          metricsRow.classList.remove("show");
+        }
+
+        requestAnimationFrame(resizeStoryCanvas);
+      }
+
+      function updateStoryRandomSample() {
+        const tr = DATA.trajectories[trackIdx];
+        const truth = exactAverage(tr, startPct, endPct);
+        const s = randomSpotChecks(tr, startPct, endPct, 20);
+        const acc = accuracyPct(s.avg, truth);
+        storyDarts = s.pts;
+        document.getElementById("es-rv").textContent = s.avg.toFixed(0);
+        document.getElementById("es-rs").textContent = `${acc.toFixed(1)}% accurate — jumping every second`;
+      }
+
+      function goToStep(newIdx, dir) {
+        if (isTransitioning || newIdx === storyStep) return;
+        isTransitioning = true;
+        storyMain.classList.remove("active", "prepare-enter-next", "prepare-enter-prev");
+        storyMain.classList.add(dir >= 0 ? "exit-next" : "exit-prev");
+
+        setTimeout(() => {
+          storyStep = newIdx;
+          populateStoryContent(storyStep);
+          storyMain.classList.remove("exit-next", "exit-prev");
+          storyMain.classList.add(dir >= 0 ? "prepare-enter-next" : "prepare-enter-prev");
+          void storyMain.offsetWidth; // Force reflow for crisp masked entrance
+          requestAnimationFrame(() => {
+            storyMain.classList.remove("prepare-enter-next", "prepare-enter-prev");
+            storyMain.classList.add("active");
+            setTimeout(() => { isTransitioning = false; }, 380);
+          });
+        }, 320);
+      }
+
+      function enterSimulation() {
+        mode = "sim";
+        storyStage.classList.add("exited");
+        canvasWrap.classList.add("visible");
+        simUi.classList.remove("hidden");
+        document.getElementById("reticle").style.opacity = outsideView ? "0" : "1";
+        ridePos = 0.0;
+        playing = true;
+        document.getElementById("btn-play").textContent = "Pause";
+        updateGatesAndMeters();
+      }
+
+      function replayStory() {
+        mode = "story";
+        storyStep = 0;
+        canvasWrap.classList.remove("visible");
+        simUi.classList.add("hidden");
+        document.getElementById("reticle").style.opacity = "0";
+        document.getElementById("jolt-banner").classList.remove("show");
+        storyStage.classList.remove("exited");
+        populateStoryContent(0);
+        storyMain.classList.remove("active");
+        storyMain.classList.add("prepare-enter-next");
+        void storyMain.offsetWidth;
+        requestAnimationFrame(() => {
+          storyMain.classList.remove("prepare-enter-next");
+          storyMain.classList.add("active");
+        });
+      }
+
+      document.getElementById("btn-next").addEventListener("click", () => {
+        if (storyStep < STEPS.length - 1) goToStep(storyStep + 1, 1);
+        else enterSimulation();
+      });
+      document.getElementById("btn-back").addEventListener("click", () => {
+        if (storyStep > 0) goToStep(storyStep - 1, -1);
+      });
+      document.getElementById("btn-skip").addEventListener("click", enterSimulation);
+      document.getElementById("btn-replay").addEventListener("click", replayStory);
+
+      window.addEventListener("keydown", (e) => {
+        if (mode !== "story") return;
+        if (e.key === "ArrowRight" || e.key === "Enter") {
+          if (storyStep < STEPS.length - 1) goToStep(storyStep + 1, 1);
+          else enterSimulation();
+        } else if (e.key === "ArrowLeft" && storyStep > 0) {
+          goToStep(storyStep - 1, -1);
+        }
+      });
+
+      // ================= THREE.JS 3D ROLLERCOASTER SIMULATION =================
+      const XY_AMP = 13.0, Z_LEN = 155.0;
+      function tunnelPos(tr, u) {
+        return new THREE.Vector3(interp(tr.x, u) * XY_AMP, interp(tr.y, u) * XY_AMP, -u * Z_LEN);
+      }
+      function intensityColor(val, maxVal) {
+        const t = Math.min(1, Math.pow(Math.max(0, val) / Math.max(1, maxVal), 0.48));
+        const c = new THREE.Color();
+        if (t < 0.4) {
+          const u = t / 0.4;
+          c.setRGB(0.08 + u * 0.45, 0.72 - u * 0.45, 0.95);
+        } else if (t < 0.75) {
+          const u = (t - 0.4) / 0.35;
+          c.setRGB(0.53 + u * 0.45, 0.27 + u * 0.18, 0.95 - u * 0.55);
+        } else {
+          const u = (t - 0.75) / 0.25;
+          c.setRGB(1.0, 0.45 + u * 0.50, 0.40 - u * 0.25);
+        }
+        return c;
+      }
+
+      const scene = new THREE.Scene();
+      scene.fog = new THREE.FogExp2(0x06040f, 0.015);
+      const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.1, 260);
+      const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      canvasWrap.appendChild(renderer.domElement);
+
+      scene.add(new THREE.AmbientLight(0xc4b5fd, 0.85));
+      const riderLight = new THREE.PointLight(0x22d3ee, 2.2, 24);
+      scene.add(riderLight);
+
+      const dustGeo = new THREE.BufferGeometry();
+      const dustPos = new Float32Array(1200 * 3);
+      for (let i = 0; i < 1200; i++) {
+        dustPos[i * 3] = (Math.random() - 0.5) * 60;
+        dustPos[i * 3 + 1] = (Math.random() - 0.5) * 60;
+        dustPos[i * 3 + 2] = -Math.random() * (Z_LEN + 20);
+      }
+      dustGeo.setAttribute("position", new THREE.BufferAttribute(dustPos, 3));
+      scene.add(new THREE.Points(dustGeo, new THREE.PointsMaterial({ color: 0xa855f7, size: 0.22, transparent: true, opacity: 0.52 })));
+
+      const tunnelGroup = new THREE.Group();
+      scene.add(tunnelGroup);
+
+      function makeGateRing(hex) {
+        const g = new THREE.Group();
+        g.add(new THREE.Mesh(
+          new THREE.TorusGeometry(2.65, 0.14, 12, 36),
+          new THREE.MeshBasicMaterial({ color: hex })
+        ));
+        g.add(new THREE.Mesh(
+          new THREE.TorusGeometry(3.15, 0.045, 8, 36),
+          new THREE.MeshBasicMaterial({ color: hex, transparent: true, opacity: 0.5 })
+        ));
+        return g;
+      }
+      const startGate = makeGateRing(0x22d3ee);
+      const endGate = makeGateRing(0xfbbf24);
+      const dartGroup = new THREE.Group();
+      scene.add(startGate, endGate, dartGroup);
+
+      const cartGroup = new THREE.Group();
+      const cartNose = new THREE.Mesh(
+        new THREE.ConeGeometry(0.45, 1.8, 6),
+        new THREE.MeshBasicMaterial({ color: 0x22d3ee })
+      );
+      cartNose.rotation.x = -Math.PI / 2;
+      const cartWings = new THREE.Mesh(
+        new THREE.BoxGeometry(1.7, 0.08, 0.55),
+        new THREE.MeshBasicMaterial({ color: 0xf43f5e })
+      );
+      cartGroup.add(cartNose, cartWings);
+      scene.add(cartGroup);
+
+      let ridePos = 0.0, playing = true, speed = 1.0, outsideView = false, curve = null, customMessageTimer = 0;
+
+      function clearGroup(g) {
+        while (g.children.length) {
+          const c = g.children[0];
+          if (c.geometry) c.geometry.dispose();
+          if (c.material) c.material.dispose();
+          g.remove(c);
+        }
+      }
+
+      function rebuildTunnel() {
+        clearGroup(tunnelGroup);
+        const tr = DATA.trajectories[trackIdx];
+        const ctrlPts = [];
+        for (let i = 0; i <= 240; i++) ctrlPts.push(tunnelPos(tr, i / 240));
+        curve = new THREE.CatmullRomCurve3(ctrlPts);
+
+        const tubeGeo = new THREE.TubeGeometry(curve, 280, 2.75, 14, false);
+        const posAttr = tubeGeo.attributes.position;
+        const colArr = new Float32Array(posAttr.count * 3);
+        for (let i = 0; i < posAttr.count; i++) {
+          const uApprox = Math.max(0, Math.min(1, -posAttr.getZ(i) / Z_LEN));
+          const c = intensityColor(interp(tr.h, uApprox), tr.h_max);
+          colArr[i * 3] = c.r; colArr[i * 3 + 1] = c.g; colArr[i * 3 + 2] = c.b;
+        }
+        tubeGeo.setAttribute("color", new THREE.BufferAttribute(colArr, 3));
+        tunnelGroup.add(new THREE.Mesh(tubeGeo, new THREE.MeshBasicMaterial({
+          vertexColors: true, wireframe: true, transparent: true, opacity: 0.42
+        })));
+
+        for (let k = 0; k <= 75; k++) {
+          const u = k / 75;
+          const v = interp(tr.h, u);
+          const c = intensityColor(v, tr.h_max);
+          const isHot = v > tr.h_max * 0.42;
+          const ring = new THREE.Mesh(
+            new THREE.TorusGeometry(2.6, isHot ? 0.11 : 0.045, 8, 24),
+            new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: isHot ? 0.95 : 0.6 })
+          );
+          const p = curve.getPointAt(u);
+          ring.position.copy(p);
+          ring.lookAt(p.clone().add(curve.getTangentAt(u)));
+          tunnelGroup.add(ring);
+        }
+
+        tunnelGroup.add(new THREE.Line(
+          new THREE.BufferGeometry().setFromPoints(ctrlPts),
+          new THREE.LineBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.3 })
+        ));
+        updateGatesAndMeters();
+      }
+
+      const simMiniCanvas = document.getElementById("sim-mini-canvas");
+      const smCtx = simMiniCanvas.getContext("2d");
+      let simDartPts = [];
+
+      function drawSimMiniPaper() {
+        const rect = simMiniCanvas.getBoundingClientRect();
+        if (rect.width < 10 || rect.height < 10) return;
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const tw = Math.floor(rect.width * dpr), th = Math.floor(rect.height * dpr);
+        if (simMiniCanvas.width !== tw || simMiniCanvas.height !== th) {
+          simMiniCanvas.width = tw; simMiniCanvas.height = th;
+        }
+        smCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        const W = rect.width, H = rect.height;
+        const tr = DATA.trajectories[trackIdx];
+        const pad = 8;
+        const xOf = (u) => pad + u * (W - pad * 2);
+        const yBump = (v) => H - pad - Math.min(1, v / Math.max(1, tr.h_max)) * (H - pad * 2) * 0.9;
+        const cumMax = Math.max(1e-6, tr.cum[NM1]);
+        const yCum = (v) => H - pad - Math.min(1, v / cumMax) * (H - pad * 2) * 0.85;
+
+        smCtx.clearRect(0, 0, W, H);
+
+        // Shaded 20%-80% window
+        const gx0 = xOf(startPct), gx1 = xOf(endPct);
+        smCtx.fillStyle = "rgba(34,211,238,0.08)";
+        smCtx.fillRect(gx0, 2, gx1 - gx0, H - 4);
+
+        // Faint bump curve
+        smCtx.beginPath();
+        for (let i = 0; i < N; i += 2) {
+          const x = xOf(i / NM1), y = yBump(tr.h[i]);
+          if (i === 0) smCtx.moveTo(x, y); else smCtx.lineTo(x, y);
+        }
+        smCtx.strokeStyle = "rgba(168,85,247,0.45)";
+        smCtx.lineWidth = 1.2;
+        smCtx.stroke();
+
+        // Live AI Running Total up to current ridePos
+        const maxI = Math.max(1, Math.floor(ridePos * NM1));
+        smCtx.beginPath();
+        for (let i = 0; i <= maxI; i += 2) {
+          const u = i / NM1;
+          const x = xOf(u), y = yCum(u * tr.nsf[i]);
+          if (i === 0) smCtx.moveTo(x, y); else smCtx.lineTo(x, y);
+        }
+        smCtx.strokeStyle = "#22d3ee";
+        smCtx.lineWidth = 2.0;
+        smCtx.stroke();
+
+        // 20 Random pink dots
+        simDartPts.forEach((u) => {
+          smCtx.fillStyle = "#fb7185";
+          smCtx.beginPath();
+          smCtx.arc(xOf(u), yBump(interp(tr.h, u)), 2.0, 0, Math.PI * 2);
+          smCtx.fill();
+        });
+
+        // Blue (20%) & Gold (80%) check lines
+        smCtx.strokeStyle = "#22d3ee"; smCtx.lineWidth = 1.2;
+        smCtx.beginPath(); smCtx.moveTo(gx0, 2); smCtx.lineTo(gx0, H - 2); smCtx.stroke();
+        smCtx.strokeStyle = "#fbbf24";
+        smCtx.beginPath(); smCtx.moveTo(gx1, 2); smCtx.lineTo(gx1, H - 2); smCtx.stroke();
+
+        // Live white rider dot synced to 3D coaster!
+        const rx = xOf(ridePos), ry = yCum(ridePos * interp(tr.nsf, ridePos));
+        smCtx.fillStyle = "#ffffff";
+        smCtx.beginPath();
+        smCtx.arc(rx, ry, 3.6, 0, Math.PI * 2);
+        smCtx.fill();
+      }
+
+      function refreshLivePaperScores() {
+        const tr = DATA.trajectories[trackIdx];
+        const truth = exactAverage(tr, startPct, endPct);
+        const aiVal = aiTripMeterAverage(tr, startPct, endPct);
+        const aiAcc = accuracyPct(aiVal, truth);
+        const sample = randomSpotChecks(tr, startPct, endPct, 20);
+        const rAcc = accuracyPct(sample.avg, truth);
+        simDartPts = sample.pts;
+
+        document.getElementById("lp-true").textContent = `True: ${truth.toFixed(0)}`;
+        document.getElementById("lp-ai").textContent = `AI (2 checks): ${aiVal.toFixed(0)} (${aiAcc.toFixed(0)}%)`;
+        document.getElementById("lp-rand").textContent = `20 Random: ${sample.avg.toFixed(0)} (${rAcc.toFixed(0)}%)`;
+      }
+
+      function updateGatesAndMeters() {
+        if (!curve) return;
+        startGate.visible = true;
+        endGate.visible = true;
+        const u0 = Math.max(0.001, Math.min(0.998, startPct));
+        const p0 = curve.getPointAt(u0);
+        startGate.position.copy(p0);
+        startGate.lookAt(p0.clone().add(curve.getTangentAt(u0)));
+
+        const u1 = Math.max(0.002, Math.min(0.999, endPct));
+        const p1 = curve.getPointAt(u1);
+        endGate.position.copy(p1);
+        endGate.lookAt(p1.clone().add(curve.getTangentAt(u1)));
+        refreshLivePaperScores();
+      }
+
+      // Wire Simulation Controls (3 distinct tracks)
+      const trackSel = document.getElementById("track-select");
+      [
+        { idx: 16, name: "Track 1 (Big Jolt)" },
+        { idx: 1,  name: "Track 2 (Twisty Ride)" },
+        { idx: 6,  name: "Track 3 (Super Wild Jolt)" },
+      ].forEach((item) => {
+        const opt = document.createElement("option");
+        opt.value = String(item.idx);
+        opt.textContent = item.name;
+        trackSel.appendChild(opt);
+      });
+      trackSel.value = String(trackIdx);
+      trackSel.addEventListener("change", () => {
+        trackIdx = parseInt(trackSel.value, 10);
+        ridePos = 0;
+        rebuildTunnel();
+      });
+
+      const playBtn = document.getElementById("btn-play");
+      playBtn.addEventListener("click", () => {
+        playing = !playing;
+        playBtn.textContent = playing ? "Pause" : "Ride";
+      });
+
+      const camBtn = document.getElementById("btn-cam");
+      camBtn.addEventListener("click", () => {
+        outsideView = !outsideView;
+        camBtn.textContent = outsideView ? "Inside Ride" : "Outside View";
+        document.getElementById("reticle").style.opacity = (mode === "sim" && !outsideView) ? "1" : "0";
+      });
+
+      const scrubSlider = document.getElementById("scrub-slider");
+      scrubSlider.addEventListener("input", () => { ridePos = parseFloat(scrubSlider.value); });
+
+      const speedSlider = document.getElementById("speed-slider");
+      speedSlider.addEventListener("input", () => {
+        speed = parseFloat(speedSlider.value);
+        document.getElementById("spd-num").textContent = speed.toFixed(1) + "x";
+      });
+
+      // ---- Main Loop ----
+      let last = performance.now();
+      const joltBanner = document.getElementById("jolt-banner");
+      const reticle = document.getElementById("reticle");
+
+      function animate(now) {
+        requestAnimationFrame(animate);
+        const dt = Math.min(0.05, (now - last) / 1000);
+        last = now;
+
+        if (mode === "story") {
+          drawEditorialDiagram(dt);
+          if (STEPS[storyStep].diagram === "random") {
+            randTimer += dt;
+            if (randTimer > 0.9) {
+              randTimer = 0;
+              updateStoryRandomSample();
+            }
+          }
+          return; // Keep 3D renderer idle while dark editorial story stage is active
+        }
+
+        const tr = DATA.trajectories[trackIdx];
+        if (playing) {
+          ridePos += dt * 0.052 * speed;
+          if (ridePos >= 0.994) ridePos = 0.0;
+          scrubSlider.value = ridePos.toFixed(3);
+        }
+
+        const curVal = interp(tr.h, ridePos);
+        const ratio = Math.min(1, curVal / Math.max(1, tr.h_max));
+        const pctInt = Math.round(ridePos * 100);
+        const feelWord = ratio > 0.38 ? "Big Bump" : (ratio > 0.18 ? "Small Bumps" : "Smooth");
+
+        document.getElementById("scrub-val").textContent = pctInt + "%";
+        document.getElementById("pos-readout").textContent = `Track: ${pctInt}% — ${feelWord}`;
+
+        const inJolt = ratio > 0.38;
+        joltBanner.classList.toggle("show", inJolt);
+        reticle.style.borderColor = inJolt ? "rgba(244, 63, 94, 0.95)" : "rgba(34, 211, 238, 0.35)";
+        reticle.style.transform = `translate(-50%, -50%) scale(${inJolt ? 1.25 : 1.0})`;
+
+        randTimer += dt;
+        if (randTimer > 0.75) {
+          randTimer = 0;
+          refreshLivePaperScores();
+        }
+        drawSimMiniPaper();
+
+        if (curve) {
+          const u = Math.max(0.001, Math.min(0.992, ridePos));
+          const uLook = Math.min(0.998, u + 0.025);
+          const pos = curve.getPointAt(u);
+          const look = curve.getPointAt(uLook);
+          const tan = curve.getTangentAt(u);
+
+          cartGroup.visible = outsideView;
+          cartGroup.position.copy(pos);
+          cartGroup.lookAt(look);
+          riderLight.position.copy(pos);
+          riderLight.color.copy(intensityColor(curVal, tr.h_max));
+
+          const shake = inJolt ? ratio * 0.28 : 0.014 * ratio;
+          const jx = (Math.random() - 0.5) * shake;
+          const jy = (Math.random() - 0.5) * shake;
+
+          if (outsideView) {
+            const behind = pos.clone().sub(tan.clone().multiplyScalar(8.5)).add(new THREE.Vector3(jx, 3.6 + jy, 0));
+            camera.position.lerp(behind, 0.14);
+            camera.lookAt(look);
+          } else {
+            camera.position.set(pos.x + jx, pos.y + jy, pos.z);
+            camera.lookAt(look);
+          }
+        }
+
+        renderer.render(scene, camera);
+      }
+
+      window.addEventListener("resize", () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        resizeStoryCanvas();
+      });
+
+      rebuildTunnel();
+      populateStoryContent(0);
+      // Trigger clean Awwwards masked entrance on first load
+      storyMain.classList.remove("active");
+      storyMain.classList.add("prepare-enter-next");
+      void storyMain.offsetWidth;
+      requestAnimationFrame(() => {
+        storyMain.classList.remove("prepare-enter-next");
+        storyMain.classList.add("active");
+      });
+      requestAnimationFrame(animate);
+    })();
+  </script>
+</body>
+</html>

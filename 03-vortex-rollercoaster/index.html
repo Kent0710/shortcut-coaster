@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vortex Rollercoaster — First-Person 3D NSF Tunnel Ride</title>
+  <style>
+    :root {
+      --bg: #06040f;
+      --panel: rgba(14, 10, 28, 0.82);
+      --border: rgba(168, 85, 247, 0.36);
+      --cyan: #22d3ee;
+      --violet: #a855f7;
+      --pink: #ec4899;
+      --amber: #fbbf24;
+      --emerald: #34d399;
+      --text: #f8fafc;
+      --muted: #c4b5fd;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+    }
+    #canvas-wrap { position: fixed; inset: 0; }
+
+    /* Subtle Cockpit Windshield Reticle */
+    .reticle {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 52px; height: 52px; border-radius: 50%;
+      border: 1.5px solid rgba(34, 211, 238, 0.35);
+      pointer-events: none; z-index: 4;
+      transition: transform 0.1s, border-color 0.15s;
+    }
+    .reticle::before, .reticle::after {
+      content: ""; position: absolute; background: rgba(34, 211, 238, 0.5);
+    }
+    .reticle::before { width: 10px; height: 1.5px; top: 50%; left: -14px; }
+    .reticle::after { width: 10px; height: 1.5px; top: 50%; right: -14px; }
+
+    .spike-banner {
+      position: fixed; top: 18%; left: 50%; transform: translateX(-50%);
+      background: rgba(236, 72, 153, 0.22); border: 1px solid #f43f5e;
+      color: #fecdd3; font-size: 13px; font-weight: 800; letter-spacing: 0.12em;
+      padding: 6px 16px; border-radius: 999px; pointer-events: none;
+      opacity: 0; transition: opacity 0.15s ease; z-index: 12;
+      box-shadow: 0 0 24px rgba(244, 63, 94, 0.5);
+    }
+    .spike-banner.show { opacity: 1; }
+
+    .hud-top {
+      position: fixed; top: 14px; left: 16px; right: 16px;
+      display: flex; justify-content: space-between; align-items: flex-start;
+      gap: 12px; pointer-events: none; z-index: 10;
+    }
+    .gauge-card {
+      pointer-events: auto;
+      background: var(--panel); border: 1px solid var(--border);
+      backdrop-filter: blur(12px); border-radius: 14px;
+      padding: 12px 15px; width: 320px;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.55);
+    }
+    .gauge-card.cyan { border-color: rgba(34, 211, 238, 0.45); }
+    .gauge-card.pink { border-color: rgba(236, 72, 153, 0.45); }
+    .g-title {
+      font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .g-big {
+      font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums;
+      margin-top: 4px; letter-spacing: -0.02em;
+    }
+    .g-sub { font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.38; }
+    .meter-track {
+      margin-top: 8px; height: 7px; border-radius: 999px;
+      background: rgba(148, 163, 184, 0.18); overflow: hidden;
+    }
+    .meter-fill { height: 100%; width: 0%; border-radius: 999px; transition: width 0.08s linear; }
+
+    .center-pill {
+      pointer-events: auto;
+      background: var(--panel); border: 1px solid var(--border);
+      backdrop-filter: blur(12px); border-radius: 14px;
+      padding: 10px 16px; text-align: center;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.55);
+    }
+    .center-pill h1 { font-size: 15px; font-weight: 800; letter-spacing: 0.02em; }
+    .center-pill .pos-readout {
+      font-family: ui-monospace, monospace; font-size: 12px; color: var(--cyan); margin-top: 4px;
+    }
+    .gate-compare {
+      margin-top: 6px; font-size: 11px; color: #e2e8f0;
+      display: flex; gap: 12px; justify-content: center;
+    }
+
+    .cockpit-bar {
+      position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%);
+      width: min(920px, calc(100vw - 32px));
+      background: var(--panel); border: 1px solid var(--border);
+      backdrop-filter: blur(14px); border-radius: 16px; padding: 12px 16px;
+      display: grid; grid-template-columns: 1.25fr 1fr 1fr 1fr; gap: 12px; align-items: center;
+      z-index: 10; box-shadow: 0 16px 42px rgba(0,0,0,0.6);
+    }
+    .ctrl-col { display: flex; flex-direction: column; gap: 5px; }
+    .row { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+    .lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+    .val { font-size: 11px; font-family: ui-monospace, monospace; color: var(--cyan); font-weight: 700; }
+
+    select {
+      width: 100%; background: rgba(15, 10, 32, 0.95); color: var(--text);
+      border: 1px solid rgba(168, 85, 247, 0.4); border-radius: 8px;
+      padding: 5px 8px; font-size: 11.5px; outline: none; cursor: pointer;
+    }
+    input[type="range"] { width: 100%; accent-color: var(--cyan); cursor: pointer; height: 5px; }
+    #s1-slider { accent-color: var(--amber); }
+    #scrub-slider { accent-color: var(--pink); }
+
+    .btn-row { display: flex; gap: 6px; }
+    .btn {
+      flex: 1; background: rgba(168, 85, 247, 0.18); color: #f5f3ff;
+      border: 1px solid rgba(168, 85, 247, 0.5); border-radius: 9px;
+      padding: 7px 8px; font-size: 11px; font-weight: 700; cursor: pointer;
+      transition: background 0.14s;
+    }
+    .btn:hover { background: rgba(168, 85, 247, 0.34); }
+    .btn.primary {
+      background: linear-gradient(135deg, #06b6d4, #a855f7); border: none; color: #fff;
+    }
+    @media (max-width: 860px) {
+      .cockpit-bar { grid-template-columns: 1fr 1fr; }
+      .center-pill { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div id="canvas-wrap"></div>
+  <div class="reticle" id="reticle"></div>
+  <div class="spike-banner" id="spike-banner">⚡ 0.008 IMPULSE SPIKE DETECTED — ENERGY SURGE!</div>
+
+  <div class="hud-top">
+    <div class="gauge-card cyan">
+      <div class="g-title" style="color: var(--cyan)">
+        <span>⚡ NSF PREFIX METER h̃<sub>θ</sub>(s)</span>
+        <span id="nsf-live-err">—</span>
+      </div>
+      <div class="g-big" id="nsf-prefix-val" style="color: var(--cyan)">—</div>
+      <div class="g-sub">
+        2-Eval Gate Mean <b>[s₀, s₁]</b>: <b id="nsf-gate-val" style="color:#fff">—</b>
+        &nbsp;|&nbsp; Truth: <b id="true-gate-val" style="color:var(--emerald)">—</b>
+      </div>
+      <div class="meter-track"><div class="meter-fill" id="nsf-meter" style="background:linear-gradient(90deg,#06b6d4,#34d399)"></div></div>
+    </div>
+
+    <div class="center-pill">
+      <h1>🎢 Vortex Rollercoaster</h1>
+      <div class="pos-readout" id="pos-readout">s = 0.000 &nbsp;•&nbsp; h(s) = 0.0</div>
+      <div class="gate-compare">
+        <span style="color:var(--cyan)">s₀ Gate</span>
+        <span>→</span>
+        <span style="color:var(--amber)">s₁ Gate</span>
+        <span id="cam-badge" style="color:var(--pink)">[Cockpit FP]</span>
+      </div>
+    </div>
+
+    <div class="gauge-card pink">
+      <div class="g-title" style="color: var(--pink)">
+        <span>🎲 LIVE MC-20 RADAR (NOISY)</span>
+        <span id="mc-live-err">—</span>
+      </div>
+      <div class="g-big" id="mc-gate-val" style="color: var(--pink)">—</div>
+      <div class="g-sub">
+        Resamples 20 random points inside <b>[s₀, s₁]</b> every 0.45s — watch the needle jump when pings miss the narrow spike!
+      </div>
+      <div class="meter-track"><div class="meter-fill" id="mc-meter" style="background:linear-gradient(90deg,#ec4899,#fbbf24)"></div></div>
+    </div>
+  </div>
+
+  <div class="cockpit-bar">
+    <div class="ctrl-col">
+      <div class="row"><span class="lbl">Trajectory Track</span><span class="val" id="speed-val">1.0×</span></div>
+      <select id="traj-select"></select>
+      <div class="btn-row" style="margin-top:3px;">
+        <button class="btn primary" id="btn-play">⏸ Pause</button>
+        <button class="btn" id="btn-cam">🎥 Chase Cam</button>
+      </div>
+    </div>
+
+    <div class="ctrl-col">
+      <div class="row"><span class="lbl" style="color:var(--pink)">Ride Position s</span><span class="val" id="scrub-val" style="color:var(--pink)">0.00</span></div>
+      <input type="range" id="scrub-slider" min="0" max="0.995" step="0.002" value="0.00" />
+      <div class="row"><span class="lbl">Ride Speed</span><span class="val" id="spd-lbl">Normal</span></div>
+      <input type="range" id="speed-slider" min="0.2" max="2.4" step="0.1" value="1.0" />
+    </div>
+
+    <div class="ctrl-col">
+      <div class="row"><span class="lbl" style="color:var(--cyan)">Entry Portal s₀</span><span class="val" id="s0-val">0.20</span></div>
+      <input type="range" id="s0-slider" min="0" max="0.90" step="0.005" value="0.20" />
+      <div class="row"><span class="lbl" style="color:var(--amber)">Exit Portal s₁</span><span class="val" id="s1-val" style="color:var(--amber)">0.80</span></div>
+      <input type="range" id="s1-slider" min="0.10" max="1.00" step="0.005" value="0.80" />
+    </div>
+
+    <div class="ctrl-col">
+      <div class="lbl">How To Feel NSF</div>
+      <div style="font-size:11px;color:#cbd5e1;line-height:1.38;">
+        Notice how the <b>NSF Prefix Meter</b> glides smoothly across the 40-cycle waves &amp; spike, letting you read any <b>[s₀, s₁]</b> mean in <b>2 evaluations</b> while MC-20 flickers wildly.
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+  <script src="game_data.js"></script>
+  <script>
+    (function () {
+      const DATA = window.NSF_GAME_DATA;
+      if (!DATA || !DATA.trajectories || !DATA.trajectories.length) {
+        document.body.innerHTML = '<div style="padding:40px;color:#fff;font-family:sans-serif">Error: game_data.js not loaded.</div>';
+        return;
+      }
+
+      const N = DATA.n_points, NM1 = N - 1;
+      function interp(arr, s) {
+        const c = Math.max(0, Math.min(1, s));
+        const f = c * NM1;
+        const i = Math.min(NM1 - 1, Math.floor(f));
+        const t = f - i;
+        return arr[i] * (1 - t) + arr[i + 1] * t;
+      }
+      function analyticMean(tr, a, b) {
+        return (interp(tr.cum, b) - interp(tr.cum, a)) / Math.max(1e-6, b - a);
+      }
+      function nsfMean(tr, a, b) {
+        const v1 = b * interp(tr.nsf, b);
+        const v0 = a > 1e-6 ? a * interp(tr.nsf, a) : 0;
+        return (v1 - v0) / Math.max(1e-6, b - a);
+      }
+      function mcSample(tr, a, b, K) {
+        let sum = 0;
+        const w = b - a;
+        for (let k = 0; k < K; k++) sum += interp(tr.h, a + Math.random() * w);
+        return sum / K;
+      }
+
+      // Helical 3D Rollercoaster Tunnel Mapping:
+      // Uses real (x(s), y(s)) spiral displaced along forward Z so the rider flies through an open corkscrew vortex!
+      const XY_AMP = 13.0;
+      const Z_LEN = 155.0;
+      function tunnelPos(tr, s) {
+        const x = interp(tr.x, s) * XY_AMP;
+        const y = interp(tr.y, s) * XY_AMP;
+        const z = -s * Z_LEN;
+        return new THREE.Vector3(x, y, z);
+      }
+      function heatColor(hVal, hMax) {
+        const t = Math.min(1, Math.pow(Math.max(0, hVal) / Math.max(1, hMax), 0.48));
+        const c = new THREE.Color();
+        if (t < 0.4) {
+          const u = t / 0.4;
+          c.setRGB(0.08 + u * 0.45, 0.72 - u * 0.45, 0.95);
+        } else if (t < 0.75) {
+          const u = (t - 0.4) / 0.35;
+          c.setRGB(0.53 + u * 0.45, 0.27 + u * 0.18, 0.95 - u * 0.55);
+        } else {
+          const u = (t - 0.75) / 0.25;
+          c.setRGB(1.0, 0.45 + u * 0.50, 0.40 - u * 0.25);
+        }
+        return c;
+      }
+
+      // ---- Three.js Scene ----
+      const wrap = document.getElementById("canvas-wrap");
+      const scene = new THREE.Scene();
+      scene.fog = new THREE.FogExp2(0x06040f, 0.015);
+
+      const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.1, 260);
+      const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      wrap.appendChild(renderer.domElement);
+
+      scene.add(new THREE.AmbientLight(0xc4b5fd, 0.8));
+      const sledLight = new THREE.PointLight(0x22d3ee, 2.2, 24);
+      scene.add(sledLight);
+
+      // Ambient neon star dust along the tunnel corridor
+      const dustGeo = new THREE.BufferGeometry();
+      const dustPos = new Float32Array(1200 * 3);
+      for (let i = 0; i < 1200; i++) {
+        dustPos[i * 3] = (Math.random() - 0.5) * 60;
+        dustPos[i * 3 + 1] = (Math.random() - 0.5) * 60;
+        dustPos[i * 3 + 2] = -Math.random() * (Z_LEN + 20);
+      }
+      dustGeo.setAttribute("position", new THREE.BufferAttribute(dustPos, 3));
+      scene.add(new THREE.Points(dustGeo, new THREE.PointsMaterial({ color: 0xa855f7, size: 0.22, transparent: true, opacity: 0.55 })));
+
+      const tunnelGroup = new THREE.Group();
+      scene.add(tunnelGroup);
+
+      // Neon Portal Rings for s0 (cyan) and s1 (amber)
+      function makePortal(hex) {
+        const g = new THREE.Group();
+        g.add(new THREE.Mesh(
+          new THREE.TorusGeometry(2.65, 0.13, 12, 36),
+          new THREE.MeshBasicMaterial({ color: hex })
+        ));
+        g.add(new THREE.Mesh(
+          new THREE.TorusGeometry(3.15, 0.04, 8, 36),
+          new THREE.MeshBasicMaterial({ color: hex, transparent: true, opacity: 0.5 })
+        ));
+        return g;
+      }
+      const portal0 = makePortal(0x22d3ee);
+      const portal1 = makePortal(0xfbbf24);
+      scene.add(portal0, portal1);
+
+      // Energy Sled (visible in Chase Cam)
+      const sledGroup = new THREE.Group();
+      const sledBody = new THREE.Mesh(
+        new THREE.ConeGeometry(0.45, 1.8, 6),
+        new THREE.MeshBasicMaterial({ color: 0x22d3ee, wireframe: false })
+      );
+      sledBody.rotation.x = -Math.PI / 2;
+      const sledWing = new THREE.Mesh(
+        new THREE.BoxGeometry(1.7, 0.08, 0.55),
+        new THREE.MeshBasicMaterial({ color: 0xec4899 })
+      );
+      sledGroup.add(sledBody, sledWing);
+      scene.add(sledGroup);
+
+      // ---- Ride State ----
+      let trajIdx = 0;
+      let s0 = 0.20, s1 = 0.80;
+      let rideS = 0.0;
+      let playing = true;
+      let speed = 1.0;
+      let chaseCam = false;
+      let curve = null;
+      let mcTimer = 0;
+
+      function clearGroup(g) {
+        while (g.children.length) {
+          const c = g.children[0];
+          if (c.geometry) c.geometry.dispose();
+          if (c.material) c.material.dispose();
+          g.remove(c);
+        }
+      }
+
+      function rebuildTunnel() {
+        clearGroup(tunnelGroup);
+        const tr = DATA.trajectories[trajIdx];
+
+        const ctrlPts = [];
+        const samples = 240;
+        for (let i = 0; i <= samples; i++) ctrlPts.push(tunnelPos(tr, i / samples));
+        curve = new THREE.CatmullRomCurve3(ctrlPts);
+
+        // Wireframe energy tunnel shell
+        const segs = 280, radSegs = 14;
+        const tubeGeo = new THREE.TubeGeometry(curve, segs, 2.75, radSegs, false);
+        const posAttr = tubeGeo.attributes.position;
+        const colArr = new Float32Array(posAttr.count * 3);
+        for (let i = 0; i < posAttr.count; i++) {
+          const z = posAttr.getZ(i);
+          const sApprox = Math.max(0, Math.min(1, -z / Z_LEN));
+          const hv = interp(tr.h, sApprox);
+          const c = heatColor(hv, tr.h_max);
+          colArr[i * 3] = c.r; colArr[i * 3 + 1] = c.g; colArr[i * 3 + 2] = c.b;
+        }
+        tubeGeo.setAttribute("color", new THREE.BufferAttribute(colArr, 3));
+        const tunnelWire = new THREE.Mesh(tubeGeo, new THREE.MeshBasicMaterial({
+          vertexColors: true, wireframe: true, transparent: true, opacity: 0.42
+        }));
+        tunnelGroup.add(tunnelWire);
+
+        // Luminous speed rings every 1/60 along tunnel, reactive to local h(s)
+        for (let k = 0; k <= 75; k++) {
+          const sv = k / 75;
+          const hv = interp(tr.h, sv);
+          const c = heatColor(hv, tr.h_max);
+          const isHot = hv > tr.h_max * 0.42;
+          const ring = new THREE.Mesh(
+            new THREE.TorusGeometry(2.6, isHot ? 0.11 : 0.045, 8, 24),
+            new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: isHot ? 0.95 : 0.6 })
+          );
+          const p = curve.getPointAt(sv);
+          const tan = curve.getTangentAt(sv);
+          ring.position.copy(p);
+          ring.lookAt(p.clone().add(tan));
+          tunnelGroup.add(ring);
+        }
+
+        // Center guide rail
+        const railGeo = new THREE.BufferGeometry().setFromPoints(ctrlPts);
+        tunnelGroup.add(new THREE.Line(railGeo, new THREE.LineBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.3 })));
+
+        updatePortalsAndGateStats();
+      }
+
+      function updatePortalsAndGateStats() {
+        if (!curve) return;
+        const p0 = curve.getPointAt(Math.max(0.001, Math.min(0.998, s0)));
+        portal0.position.copy(p0);
+        portal0.lookAt(p0.clone().add(curve.getTangentAt(Math.max(0.001, Math.min(0.998, s0)))));
+
+        const p1 = curve.getPointAt(Math.max(0.002, Math.min(0.999, s1)));
+        portal1.position.copy(p1);
+        portal1.lookAt(p1.clone().add(curve.getTangentAt(Math.max(0.002, Math.min(0.999, s1)))));
+
+        const tr = DATA.trajectories[trajIdx];
+        const tMean = analyticMean(tr, s0, s1);
+        const nMean = nsfMean(tr, s0, s1);
+        const rel = Math.abs(nMean - tMean) / Math.max(1e-6, tMean) * 100;
+
+        document.getElementById("nsf-gate-val").textContent = nMean.toFixed(1);
+        document.getElementById("true-gate-val").textContent = tMean.toFixed(1);
+        document.getElementById("nsf-live-err").textContent = `Err ${rel.toFixed(2)}%`;
+        document.getElementById("nsf-live-err").style.color = rel < 4 ? "var(--emerald)" : "var(--amber)";
+        refreshMcRadar();
+      }
+
+      function refreshMcRadar() {
+        const tr = DATA.trajectories[trajIdx];
+        const tMean = analyticMean(tr, s0, s1);
+        const mcEst = mcSample(tr, s0, s1, 20);
+        const rel = Math.abs(mcEst - tMean) / Math.max(1e-6, tMean) * 100;
+        document.getElementById("mc-gate-val").textContent = mcEst.toFixed(1);
+        document.getElementById("mc-live-err").textContent = `Err ${rel.toFixed(1)}%`;
+        const pct = Math.min(100, (mcEst / Math.max(1, tr.h_mean_full * 2.2)) * 100);
+        document.getElementById("mc-meter").style.width = pct.toFixed(1) + "%";
+      }
+
+      // ---- Wire UI ----
+      const trajSel = document.getElementById("traj-select");
+      DATA.trajectories.forEach((tr, i) => {
+        const opt = document.createElement("option");
+        opt.value = i;
+        opt.textContent = `${tr.label} (peak=${tr.h_max.toFixed(0)})`;
+        trajSel.appendChild(opt);
+      });
+      trajSel.addEventListener("change", () => {
+        trajIdx = parseInt(trajSel.value, 10);
+        rideS = 0;
+        rebuildTunnel();
+      });
+
+      const playBtn = document.getElementById("btn-play");
+      playBtn.addEventListener("click", () => {
+        playing = !playing;
+        playBtn.textContent = playing ? "⏸ Pause" : "▶ Ride";
+      });
+
+      const camBtn = document.getElementById("btn-cam");
+      camBtn.addEventListener("click", () => {
+        chaseCam = !chaseCam;
+        camBtn.textContent = chaseCam ? "🚀 Cockpit FP" : "🎥 Chase Cam";
+        document.getElementById("cam-badge").textContent = chaseCam ? "[Chase Cam]" : "[Cockpit FP]";
+        document.getElementById("reticle").style.display = chaseCam ? "none" : "block";
+      });
+
+      const scrubSlider = document.getElementById("scrub-slider");
+      scrubSlider.addEventListener("input", () => {
+        rideS = parseFloat(scrubSlider.value);
+      });
+
+      const speedSlider = document.getElementById("speed-slider");
+      speedSlider.addEventListener("input", () => {
+        speed = parseFloat(speedSlider.value);
+        document.getElementById("speed-val").textContent = speed.toFixed(1) + "×";
+        document.getElementById("spd-lbl").textContent = speed < 0.7 ? "Slow-Mo" : (speed > 1.6 ? "Hyper" : "Normal");
+      });
+
+      const s0Slider = document.getElementById("s0-slider");
+      const s1Slider = document.getElementById("s1-slider");
+      function onGateSlide() {
+        let a = parseFloat(s0Slider.value);
+        let b = parseFloat(s1Slider.value);
+        if (b - a < 0.08) {
+          if (this === s0Slider) { a = Math.max(0, b - 0.08); s0Slider.value = a.toFixed(3); }
+          else { b = Math.min(1, a + 0.08); s1Slider.value = b.toFixed(3); }
+        }
+        s0 = a; s1 = b;
+        document.getElementById("s0-val").textContent = s0.toFixed(2);
+        document.getElementById("s1-val").textContent = s1.toFixed(2);
+        updatePortalsAndGateStats();
+      }
+      s0Slider.addEventListener("input", onGateSlide);
+      s1Slider.addEventListener("input", onGateSlide);
+
+      // ---- 60 FPS Animation Loop ----
+      let last = performance.now();
+      const spikeBanner = document.getElementById("spike-banner");
+      const reticle = document.getElementById("reticle");
+
+      function animate(now) {
+        requestAnimationFrame(animate);
+        const dt = Math.min(0.05, (now - last) / 1000);
+        last = now;
+
+        if (playing) {
+          rideS += dt * 0.055 * speed;
+          if (rideS >= 0.994) rideS = 0.0;
+          scrubSlider.value = rideS.toFixed(3);
+        }
+
+        const tr = DATA.trajectories[trajIdx];
+        const hv = interp(tr.h, rideS);
+        const nsfCur = interp(tr.nsf, Math.max(0.002, rideS));
+        const hRatio = Math.min(1, hv / Math.max(1, tr.h_max));
+
+        // Update live windshield meters
+        document.getElementById("scrub-val").textContent = rideS.toFixed(3);
+        document.getElementById("pos-readout").textContent = `s = ${rideS.toFixed(3)}  •  h(s) = ${hv.toFixed(1)}`;
+        document.getElementById("nsf-prefix-val").textContent = nsfCur.toFixed(1);
+        document.getElementById("nsf-meter").style.width = Math.min(100, (nsfCur / Math.max(1, tr.h_mean_full * 2.2)) * 100).toFixed(1) + "%";
+
+        // Spike alert & camera shake!
+        const inSpike = hRatio > 0.38;
+        spikeBanner.classList.toggle("show", inSpike);
+        reticle.style.borderColor = inSpike ? "rgba(244, 63, 94, 0.95)" : "rgba(34, 211, 238, 0.35)";
+        reticle.style.transform = `translate(-50%, -50%) scale(${inSpike ? 1.25 : 1.0})`;
+
+        // Periodic MC-20 flicker so user sees the variance live
+        mcTimer += dt;
+        if (mcTimer > 0.45) {
+          mcTimer = 0;
+          refreshMcRadar();
+        }
+
+        if (curve) {
+          const u = Math.max(0.001, Math.min(0.992, rideS));
+          const uLook = Math.min(0.998, u + 0.025);
+          const pos = curve.getPointAt(u);
+          const look = curve.getPointAt(uLook);
+          const tan = curve.getTangentAt(u);
+
+          sledGroup.visible = chaseCam;
+          sledGroup.position.copy(pos);
+          sledGroup.lookAt(look);
+          sledLight.position.copy(pos);
+          sledLight.color.copy(heatColor(hv, tr.h_max));
+
+          const shake = inSpike ? hRatio * 0.28 : 0.015 * hRatio;
+          const jx = (Math.random() - 0.5) * shake;
+          const jy = (Math.random() - 0.5) * shake;
+
+          if (chaseCam) {
+            const behind = pos.clone().sub(tan.clone().multiplyScalar(8.5)).add(new THREE.Vector3(jx, 3.6 + jy, 0));
+            camera.position.lerp(behind, 0.14);
+            camera.lookAt(look);
+          } else {
+            camera.position.set(pos.x + jx, pos.y + jy, pos.z);
+            camera.lookAt(look);
+          }
+        }
+
+        renderer.render(scene, camera);
+      }
+
+      window.addEventListener("resize", () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+
+      rebuildTunnel();
+      requestAnimationFrame(animate);
+    })();
+  </script>
+</body>
+</html>

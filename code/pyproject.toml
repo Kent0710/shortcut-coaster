@@ -1,0 +1,15 @@
+[project]
+name = "nsf-best-explainer"
+version = "0.1.0"
+description = "Interactive Gradio Explainer Space and PyTorch Open Artifact for Neural Statistical Functions (arXiv:2605.11327v1)"
+authors = [
+    { name = "Kent0710", email = "christiankent001@gmail.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "gradio>=5.25.0",
+    "matplotlib>=3.10.0",
+    "numpy>=2.2.0",
+    "scipy>=1.15.0",
+    "torch>=2.6.0",
+]

@@ -1,0 +1,19 @@
+# Python & Virtual Environments
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Runtime Caches
+.mplconfig/
+gradio_cached_examples/
+*.log

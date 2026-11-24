@@ -413,9 +413,9 @@
       }
       .cockpit-collapsible {
         display: flex; flex-direction: column; gap: 10px;
-        max-height: 36vh;
+        max-height: 360px;
         opacity: 1;
-        overflow-y: auto;
+        overflow: hidden;
         transition: max-height 0.42s var(--ease-out-expo), opacity 0.28s ease;
       }
       .cockpit-bar.collapsed .cockpit-collapsible {

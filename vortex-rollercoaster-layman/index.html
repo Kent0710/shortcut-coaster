@@ -404,21 +404,19 @@
       }
       .cockpit-bar {
         grid-template-columns: 1fr;
-        gap: 0;
+        gap: 8px;
         padding: 10px 14px;
         transition: transform 0.42s var(--ease-out-expo), opacity 0.3s ease;
       }
       .mobile-toggle-bar {
         display: flex; justify-content: space-between; align-items: center;
-        margin-bottom: 8px;
       }
-      .cockpit-bar.collapsed .mobile-toggle-bar { margin-bottom: 0; }
       .cockpit-collapsible {
         display: flex; flex-direction: column; gap: 10px;
-        max-height: 46vh;
+        max-height: 36vh;
         opacity: 1;
         overflow-y: auto;
-        transition: max-height 0.45s var(--ease-out-expo), opacity 0.3s ease;
+        transition: max-height 0.42s var(--ease-out-expo), opacity 0.28s ease;
       }
       .cockpit-bar.collapsed .cockpit-collapsible {
         max-height: 0;
@@ -536,6 +534,17 @@
         <span class="lbl">Controls</span>
         <button class="btn-collapse" id="btn-collapse">Collapse</button>
       </div>
+      <div class="live-paper-card">
+        <div class="lp-head">
+          <span>Paper in Action (20% to 80%)</span>
+          <span class="lp-sub" id="lp-true">True: —</span>
+        </div>
+        <canvas id="sim-mini-canvas"></canvas>
+        <div class="lp-scores">
+          <span class="lp-ai" id="lp-ai">AI (2 checks): —</span>
+          <span class="lp-rand" id="lp-rand">20 Random: —</span>
+        </div>
+      </div>
       <div class="cockpit-collapsible" style="display:contents;">
         <div class="ctrl-col">
           <div class="row"><span class="lbl">Pick a Track</span></div>
@@ -543,18 +552,6 @@
           <div class="btn-row" style="margin-top:3px;">
             <button class="btn primary" id="btn-play">Pause</button>
             <button class="btn" id="btn-cam">Outside View</button>
-          </div>
-        </div>
-
-        <div class="live-paper-card">
-          <div class="lp-head">
-            <span>Paper in Action (20% to 80%)</span>
-            <span class="lp-sub" id="lp-true">True: —</span>
-          </div>
-          <canvas id="sim-mini-canvas"></canvas>
-          <div class="lp-scores">
-            <span class="lp-ai" id="lp-ai">AI (2 checks): —</span>
-            <span class="lp-rand" id="lp-rand">20 Random: —</span>
           </div>
         </div>
 

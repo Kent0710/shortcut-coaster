@@ -382,9 +382,26 @@
     .btn:hover { background: rgba(255, 255, 255, 0.16); }
     .btn.primary { background: #ffffff; border-color: #ffffff; color: #050509; font-weight: 700; }
 
+    .next-short { display: none; }
+
     @media (max-width: 640px) {
+      .story-stage { padding: 18px 16px 20px; gap: 14px; }
+      .meta-strip { font-size: 11px; gap: 6px; }
+      .progress-track { width: 76px; }
+      .headline { font-size: clamp(25px, 7.2vw, 34px); }
+      .hairline { margin: 16px 0; }
+      .lead-copy { font-size: 15px; line-height: 1.52; }
+      .diagram-frame { height: 156px; }
+      .story-footer { padding-top: 14px; }
+      #btn-back, .skip-extra, .nav-hint, .next-full { display: none; }
+      .next-short { display: inline; }
+      .btn-editorial, .btn-editorial-primary {
+        white-space: nowrap;
+        padding: 10px 20px;
+        font-size: 13px;
+      }
       .cockpit-bar { grid-template-columns: 1fr; }
-      .live-paper-card, .nav-hint { display: none; }
+      .live-paper-card { display: none; }
       .live-metrics-row.show { grid-template-columns: 1fr; }
     }
   </style>
@@ -458,10 +475,10 @@
     <footer class="story-footer">
       <div class="nav-left">
         <button class="btn-editorial" id="btn-back" disabled>Previous</button>
-        <button class="btn-editorial" id="btn-skip">Skip to Ride</button>
+        <button class="btn-editorial" id="btn-skip">Skip<span class="skip-extra"> to Ride</span></button>
         <span class="nav-hint">Left and Right arrow keys work too</span>
       </div>
-      <button class="btn-editorial-primary" id="btn-next">Next: The Goal</button>
+      <button class="btn-editorial-primary" id="btn-next"><span class="next-full">Next: The Goal</span><span class="next-short">Next</span></button>
     </footer>
   </section>
 
@@ -869,19 +886,22 @@
         if (st.diagram === "arr_raw" || st.diagram === "arr_cum" || st.diagram === "arr_sub") {
           const vals = [2, 3, 2, 4, 40, 3, 2, 3, 3, 2];
           const cums = [2, 5, 7, 11, 51, 54, 56, 59, 62, 64];
-          const leftLabelW = 104;
-          const availW = W - padX * 2 - leftLabelW;
-          const gap = 6;
-          const boxW = Math.max(26, (availW - gap * 9) / 10);
-          const startX = padX + leftLabelW;
+          const isNarrow = W < 520;
+          const leftLabelW = isNarrow ? 0 : 104;
+          const availW = W - (isNarrow ? 24 : padX * 2) - leftLabelW;
+          const gap = isNarrow ? 3 : 6;
+          const boxW = Math.max(20, (availW - gap * 9) / 10);
+          const startX = (isNarrow ? 12 : padX) + leftLabelW;
 
           // Clear baseline text for clean algorithm board
           sctx.clearRect(0, 0, W, H);
 
           const drawBoxRow = (y, rowLabel, arr, modeKind) => {
-            sctx.fillStyle = "#a1a1aa";
-            sctx.font = "700 10.5px -apple-system, Inter, sans-serif";
-            sctx.fillText(rowLabel, padX, y + 20);
+            if (!isNarrow) {
+              sctx.fillStyle = "#a1a1aa";
+              sctx.font = "700 10.5px -apple-system, Inter, sans-serif";
+              sctx.fillText(rowLabel, padX, y + 20);
+            }
 
             const revealCount = modeKind === "cum" ? Math.max(1, Math.ceil(10 * storyAnimT)) : 10;
             for (let i = 0; i < 10; i++) {
@@ -1221,7 +1241,8 @@
           .map((ln, i) => `<span class="line-mask"><span class="reveal-el d${i + 2}">${ln}</span></span>`)
           .join("");
         document.getElementById("story-body").innerHTML = st.body;
-        document.getElementById("btn-next").textContent = st.nextLabel;
+        const shortNext = idx === STEPS.length - 1 ? "Start Ride" : "Next";
+        document.getElementById("btn-next").innerHTML = `<span class="next-full">${st.nextLabel}</span><span class="next-short">${shortNext}</span>`;
         document.getElementById("btn-back").disabled = idx === 0;
         document.getElementById("color-key").classList.toggle("show", st.showKey);
 

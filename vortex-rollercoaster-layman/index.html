@@ -463,7 +463,7 @@
         <div class="reveal-el d5 diagram-frame">
           <canvas id="story-canvas"></canvas>
         </div>
-        <div class="live-metrics-row" id="live-metrics-row">
+        <div class="reveal-el d5 live-metrics-row" id="live-metrics-row">
           <div class="editorial-stat" id="es-left">
             <div>
               <div class="es-k" id="es-lk">True Bump Score</div>
@@ -770,13 +770,20 @@
         sctx.fillText("0% Track Start", padX, H - 5);
         sctx.fillText("100% Track End", W - padX - 76, H - 5);
 
-        // Helper: draw clean pill label so text NEVER overlaps lines
+        // Helper: draw clean pill label that NEVER overlaps or overflows horizontally
         const drawPill = (text, x, y, textColor, borderColor) => {
-          sctx.font = "700 10.5px -apple-system, Inter, sans-serif";
-          const tw = sctx.measureText(text).width;
-          const px = Math.max(padX, Math.min(W - padX - tw - 12, x));
+          const maxPillW = W - 20;
+          let fontSize = W < 520 ? 9.5 : 10.5;
+          sctx.font = `700 ${fontSize}px -apple-system, Inter, sans-serif`;
+          let tw = sctx.measureText(text).width;
+          if (tw + 12 > maxPillW) {
+            fontSize = Math.max(8, Math.floor(fontSize * ((maxPillW - 12) / tw) * 10) / 10);
+            sctx.font = `700 ${fontSize}px -apple-system, Inter, sans-serif`;
+            tw = sctx.measureText(text).width;
+          }
+          const px = Math.max(10, Math.min(W - tw - 16, x));
           const py = Math.max(14, Math.min(H - 12, y));
-          sctx.fillStyle = "rgba(8, 7, 16, 0.90)";
+          sctx.fillStyle = "rgba(8, 7, 16, 0.92)";
           sctx.fillRect(px, py - 11, tw + 10, 16);
           sctx.strokeStyle = borderColor;
           sctx.lineWidth = 1;
@@ -836,8 +843,9 @@
           sctx.fillStyle = "#fb7185";
           sctx.fill();
 
-          drawPill("Problem: How to measure this wild track fast?", padX, 28, "#22d3ee", "rgba(34,211,238,0.45)");
-          drawPill("Tiny giant spike hides from slow guesses", px + 12, py + 4, "#fda4af", "rgba(244,63,94,0.55)");
+          const isNarrow = W < 520;
+          drawPill(isNarrow ? "Problem: Measure track fast?" : "Problem: How to measure this wild track fast?", padX, 20, "#22d3ee", "rgba(34,211,238,0.45)");
+          drawPill(isNarrow ? "Hidden spike" : "Tiny giant spike hides from slow guesses", px + 10, Math.max(46, py + 12), "#fda4af", "rgba(244,63,94,0.55)");
           return;
         }
 
@@ -983,15 +991,24 @@
             sctx.beginPath();
             sctx.moveTo(x3, 76); sctx.lineTo(x3, 84); sctx.lineTo(x8, 84); sctx.lineTo(x8, 76);
             sctx.stroke();
-            drawPill("Middle Section (Box 3 to Box 8): 2 + 4 + 40 + 3 + 2 + 3 = 54  (6 boxes)", x3 + 8, 126, "#34d399", "rgba(52,211,153,0.5)");
+            drawPill(
+              isNarrow ? "Box 3-8: 2+4+40+3+2+3 = 54 (6 boxes)" : "Middle Section (Box 3 to Box 8): 2 + 4 + 40 + 3 + 2 + 3 = 54  (6 boxes)",
+              isNarrow ? 12 : x3 + 8, 126, "#34d399", "rgba(52,211,153,0.5)"
+            );
           } else if (st.diagram === "arr_cum") {
             drawBoxRow(28, "Bump Score", vals, "raw");
             drawBoxRow(74, "Running Total", cums, "cum");
-            drawPill("Each box adds all bumps from Box 1 up to here  (Box 5 jumps 11 -> 51)", startX, 146, "#22d3ee", "rgba(34,211,238,0.45)");
+            drawPill(
+              isNarrow ? "Adds from Box 1 (Box 5: 11 -> 51)" : "Each box adds all bumps from Box 1 up to here  (Box 5 jumps 11 -> 51)",
+              startX, 146, "#22d3ee", "rgba(34,211,238,0.45)"
+            );
           } else {
             drawBoxRow(28, "Bump Score", vals, "raw");
             drawBoxRow(74, "Running Total", cums, "sub");
-            drawPill("Total: 59 - 5 = 54   |   Average: 54 / 6 (Box 3 to Box 8) = 9   (Only 2 Checks)", startX, 146, "#fbbf24", "rgba(251,191,36,0.55)");
+            drawPill(
+              isNarrow ? "59 - 5 = 54  |  54 / 6 (Box 3-8) = 9" : "Total: 59 - 5 = 54   |   Average: 54 / 6 (Box 3 to Box 8) = 9   (Only 2 Checks)",
+              startX, 146, "#fbbf24", "rgba(251,191,36,0.55)"
+            );
           }
           return;
         }
